@@ -1,0 +1,13 @@
+{
+  "name": "chip-inmp441",
+  "author": "Proyecto Nonofono",
+  "version": "1.0.0",
+  "pins": [
+    "VDD",
+    "GND",
+    "SD",
+    "L_R",
+    "WS",
+    "SCK"
+  ]
+}
