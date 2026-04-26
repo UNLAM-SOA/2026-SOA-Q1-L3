@@ -82,7 +82,7 @@ void mostrarNavegandoContactos(String contactos[10], int indiceSeleccionado) {
     }
 
     // 6. Estado: Confirmar mensaje
-    void mostrarConfirmarMensaje() {
+    void mostrarConfirmarAudio() {
         lcd.clear();
         lcd.setCursor(0, 0); lcd.print(char(168)); // Símbolo '¿' en ASCII extendido
         lcd.print("DESEA CONFIRMAR");

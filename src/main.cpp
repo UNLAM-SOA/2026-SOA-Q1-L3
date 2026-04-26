@@ -56,6 +56,32 @@ const unsigned long TIEMPO_DEBOUNCE = 200; // Los mismos 200ms que tenías
 // 🧠 DEFINICIÓN DE LA MÁQUINA DE ESTADOS
 // ==========================================
 
+//----------------------------------------------
+// EVENTOS
+//----------------------------------------------
+enum TipoEvento {
+    EV_CONTINUE,
+    EV_BTN_ARRIBA,
+    EV_BTN_ABAJO,
+    EV_BTN_CONFIRMAR,
+    EV_BTN_CANCELAR,
+    EV_BTN_GRABAR,
+    EV_BTN_EMERGENCIA,
+    EV_TIMEOUT,
+    EV_WIFI_EXITO,
+    EV_WIFI_ERROR
+};
+
+struct Evento {
+    TipoEvento tipo;
+};
+
+Evento evento;
+
+//----------------------------------------------
+// ESTADOS
+//----------------------------------------------
+
 enum EstadoFSM
 {
     INIT,
@@ -63,7 +89,7 @@ enum EstadoFSM
     NAVEGANDO,
     CONFIRMAR_CONTACTO,
     GRABANDO,
-    CONFIRMAR_MENSAJE,
+    CONFIRMAR_AUDIO,
     MENSAJE_PREDEFINIDO,
     EMERGENCIA,
     ESPERANDO_WIFI,    // El que ya tenías
@@ -123,15 +149,30 @@ GestorDeMicrofono gestorAudio(BUZZER_PIN, LED_PIN, POT_PIN, FREC_BUZZER, MIC_SCK
 // ==========================================
 // Esta función evita que dejar apretado un botón haga que el menú pase a la velocidad de la luz.
 // Nota: En un entorno real, es mejor usar la librería Bounce2 para el anti-rebote (debouncing).
-bool leerBotonUnClic(int pin)
-{
+
+// bool leerBotonUnClic(int pin)
+// {
     // Lógica simplificada: asume botones conectados a GND con resistencia Pull-up (activos en LOW)
-    if (digitalRead(pin) == LOW)
-    {
-        delay(201); // Pequeño delay anti-rebote
-        return true;
-    }
-    return false;
+    // if (digitalRead(pin) == LOW)
+    // {
+        // delay(201); // Pequeño delay anti-rebote
+        // return true;
+    // }
+    // return false;
+// }
+
+bool leerBotonUnClic(int pin) {
+  static bool estadoAnterior[40]; // uno por pin
+
+  bool estadoActual = digitalRead(pin);
+
+  if (estadoAnterior[pin] == HIGH && estadoActual == LOW) {
+    estadoAnterior[pin] = estadoActual;
+    return true; // CLICK detectado
+  }
+
+  estadoAnterior[pin] = estadoActual;
+  return false;
 }
 
 // ==========================================
@@ -195,255 +236,359 @@ void setup()
 }
 
 // ==========================================
+// GENERADOR DE EVENTOS
+// ==========================================
+
+void generaEvento(unsigned long tiempoActual) {
+
+    // Emergencia tiene prioridad máxima
+    if (gestorBotonEmergencia.estaMantenido()) {
+        evento.tipo = EV_BTN_EMERGENCIA;
+        return;
+    }
+
+    if (leerBotonUnClic(BTN_ARRIBA)) {
+        evento.tipo = EV_BTN_ARRIBA;
+        return;
+    }
+
+    if (leerBotonUnClic(BTN_ABAJO)) {
+        evento.tipo = EV_BTN_ABAJO;
+        return;
+    }
+
+    if (leerBotonUnClic(BTN_CONFIRMAR)) {
+        evento.tipo = EV_BTN_CONFIRMAR;
+        return;
+    }
+
+    if (leerBotonUnClic(BTN_CANCELAR)) {
+        evento.tipo = EV_BTN_CANCELAR;
+        return;
+    }
+
+    if (leerBotonUnClic(BTN_GRABAR)) {
+        evento.tipo = EV_BTN_GRABAR;
+        return;
+    }
+
+    // Eventos internos (WiFi)
+    if (estadoActual == ESPERANDO_WIFI) {
+        auto r = gestorRed.actualizar();
+
+        if (r == GestorDeRed::EXITO) {
+            evento.tipo = EV_WIFI_EXITO;
+            return;
+        }
+        if (r == GestorDeRed::ERROR) {
+            evento.tipo = EV_WIFI_ERROR;
+            return;
+        }
+    }
+
+    evento.tipo = EV_CONTINUE;
+}
+
+// ==========================================
 // ⚙️ LOOP PRINCIPAL (FSM)
 // ==========================================
 
-void loop()
-{
+void loop() {
+
     unsigned long tiempoActual = millis();
-    bool dibujarPantalla = (estadoActual != estadoAnterior);
-    estadoAnterior = estadoActual; // Actualizamos el historial
+    bool cambioEstado = (estadoActual != estadoAnterior);
+    estadoAnterior = estadoActual;
 
-    // --------------------------------------------------------
-    // 🚨 INTERRUPCIÓN GLOBAL: EVENTO DE EMERGENCIA (EEM)
-    // --------------------------------------------------------
-    // Si presiona el botón por 5 segundos, interrumpe todo.
-    if (gestorBotonEmergencia.estaMantenido())
+    generaEvento(tiempoActual);
+
+    switch (estadoActual) {
+
+    //------------------------------------------
+    case INIT:
     {
-        // gestorEmergencia.dispararAlerta();
-        estadoActual = EMERGENCIA;
-    }
+        switch (evento.tipo) {
 
-    // --------------------------------------------------------
-    // 🧭 MÁQUINA DE ESTADOS PRINCIPAL
-    // --------------------------------------------------------
-    switch (estadoActual)
-    {
-
-        case INIT:
-            Serial.println(dibujarPantalla);
-            gestorUI.mostrarPantallaInit();
-            delay(3000); // Único lugar donde se permite delay (logo de inicio)
-            estadoActual = IDLE;
-            break;
-
-        case IDLE:
-            if (dibujarPantalla)
-            {
-                gestorUI.mostrarPantallaReposo();
-                indiceContacto = 0; // Reiniciamos el cursor
-            }
-
-            // Transición
-            if (leerBotonUnClic(BTN_ARRIBA) || leerBotonUnClic(BTN_ABAJO))
-            {
-                tiempoUltimaAccion = tiempoActual;
-                estadoActual = NAVEGANDO;
-            }
-            break;
-
-        case NAVEGANDO:
-            if (dibujarPantalla || indiceActual != indiceContacto)
-                gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
-            
-            indiceActual = indiceContacto;
-            
-            if (leerBotonUnClic(BTN_ABAJO))
-            {
-                indiceContacto = (indiceContacto == 10) ? 10 : indiceContacto + 1;
-                estadoActual = NAVEGANDO; // Forzamos redibujo
-                tiempoUltimaAccion = tiempoActual;
-            }
-            if (leerBotonUnClic(BTN_ARRIBA))
-            {
-                indiceContacto = (indiceContacto == 0) ? 0 : indiceContacto - 1;
-                estadoActual = NAVEGANDO; // Forzamos redibujo
-                tiempoUltimaAccion = tiempoActual;
-            }
-            if (leerBotonUnClic(BTN_CONFIRMAR))
-            {
-                tiempoUltimaAccion = tiempoActual;
-                estadoActual = CONFIRMAR_CONTACTO;
-            }
-
-            // Timeout
-            if (tiempoActual - tiempoUltimaAccion >= TIMEOUT_NAVEGANDO)
-            {
+            case EV_CONTINUE:
+                gestorUI.mostrarPantallaInit();
+                delay(3000);
                 estadoActual = IDLE;
-            }
-            break;
-
-        case CONFIRMAR_CONTACTO:
-            if (dibujarPantalla)
-                gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
-
-            if (leerBotonUnClic(BTN_CANCELAR))
-            {
-                estadoActual = NAVEGANDO;
-            }
-            if (leerBotonUnClic(BTN_CONFIRMAR))
-            {
-                tiempoUltimaAccion = tiempoActual;
-                estadoActual = MENSAJE_PREDEFINIDO;
-            }
-            
-            // Transición a grabar (asumiendo que mantiene presionado 1 segundo)
-            if (leerBotonUnClic(BTN_GRABAR))
-                gestorAudio.confirmarInicioGrabacion();
-            
-            if (gestorBotonGrabar.estaMantenido())
-            {
-                tiempoInicioGrabacion = tiempoActual;
-                gestorAudio.iniciarGrabacion();
-                // gestorAudio.iniciarGrabacion(listaContactos[indiceContacto]);
-                estadoActual = GRABANDO;
-            }
-            else if(!leerBotonUnClic(BTN_GRABAR))
-            {
-              gestorAudio.apagarBuzzer();
-            }
-
-            // Timeout
-            if (tiempoActual - tiempoUltimaAccion >= TIMEOUT_CONFIRMAR)
-            {
-                estadoActual = IDLE;
-            }
-            break;
-
-        case GRABANDO:
-            if (dibujarPantalla)
-                gestorUI.mostrarGrabando(listaContactos[indiceContacto]);
-
-            // 1. Verificamos si la persona ya soltó el botón después del inicio
-            if (esperandoLiberacionInicial)
-            {
-                if (digitalRead(BTN_GRABAR) == HIGH)
-                {
-                    delay(50); // ESTA ES LA MAGIA: 50ms matan cualquier rebote del resorte.
-
-                    // Hacemos una lectura en falso para purgar cualquier "clic" fantasma
-                    // que se haya generado durante el rebote.
-                    leerBotonUnClic(BTN_GRABAR);
-
-                    esperandoLiberacionInicial = false; // Desbloqueamos
-                }
-                break; // Salimos del case, no evaluamos el corte todavía
-            }
-
-            // 2. Lógica normal de corte (solo llega acá si ya soltó el dedo antes)
-            if (leerBotonUnClic(BTN_GRABAR) || (tiempoActual - tiempoInicioGrabacion >= MAX_TIEMPO_GRABACION))
-            {
-                esperandoLiberacionInicial = true;
-                gestorAudio.detenerGrabacion();
-                gestorRed.iniciarEnvioMensaje();
-                estadoActual = CONFIRMAR_MENSAJE;
-            }
-            break;
-
-        case CONFIRMAR_MENSAJE:
-            if (dibujarPantalla)
-                gestorUI.mostrarConfirmarMensaje();
-
-            if (leerBotonUnClic(BTN_CONFIRMAR))
-            {
-                // gestorSD.encolarMensajeParaEnvio(archivoAudioActual, listaContactos[indiceContacto]);
-                gestorRed.iniciarEnvioMensaje();
-                estadoActual = ESPERANDO_WIFI;
-            }
-            if (leerBotonUnClic(BTN_CANCELAR))
-            {
-                // gestorSD.borrarUltimoArchivo();
-                estadoActual = CONFIRMAR_CONTACTO;
-            }
-            break;
-
-        case MENSAJE_PREDEFINIDO:
-            if (dibujarPantalla || indiceMensaje != indiceMensajeActual)
-                gestorUI.mostrarMensajesPredefinidos(listaContactos[indiceContacto], listaMensajes, indiceMensaje);
-            
-            indiceMensajeActual = indiceMensaje;
-
-            if (leerBotonUnClic(BTN_ABAJO))
-            {
-                indiceMensaje = indiceMensaje == 2 ? 2 : indiceMensaje + 1;
-                estadoActual = MENSAJE_PREDEFINIDO;
-                tiempoUltimaAccion = tiempoActual;
-            }
-            if (leerBotonUnClic(BTN_ARRIBA))
-            {
-                indiceMensaje = indiceMensaje == 0 ? 0 : indiceMensaje - 1;
-                estadoActual = MENSAJE_PREDEFINIDO;
-                tiempoUltimaAccion = tiempoActual;
-            }
-            if (leerBotonUnClic(BTN_CONFIRMAR))
-            {
-                // gestorRed.enviarMensajeTexto(listaContactos[indiceContacto], listaMensajes[indiceMensaje]);
-                gestorRed.iniciarEnvioMensaje();
-                estadoActual = ESPERANDO_WIFI;
-            }
-            if (leerBotonUnClic(BTN_CANCELAR))
-            {
-                tiempoUltimaAccion = tiempoActual;
-                estadoActual = CONFIRMAR_CONTACTO;
-            }
-            break;
-
-        case ESPERANDO_WIFI:
-        {   // Las llaves aquí son buena práctica en C++ al declarar variables dentro de un case
-            respuestaMensaje = gestorRed.actualizar();
-
-            if (respuestaMensaje == GestorDeRed::EXITO) 
-            {
-              Serial.println("Printeo exito");
-                tiempoUltimaAccion = tiempoActual; // Arrancamos el cronómetro de 4 seg
-                estadoActual = MOSTRANDO_EXITO;
-            } 
-            else if (respuestaMensaje == GestorDeRed::ERROR) 
-            {
-
-              Serial.println("Printeo fracaso");
-                tiempoUltimaAccion = tiempoActual; // Arrancamos el cronómetro de 4 seg
-                estadoActual = MOSTRANDO_ERROR;
-            }
-            // Si sigue en ENVIANDO, no hace nada y el loop da otra vuelta rapidísimo
+                break;
         }
-        break;
-
-        case MOSTRANDO_EXITO:
-            if (dibujarPantalla) gestorUI.mostrarExito(); // Se dibuja una sola vez
-
-            // Evaluación no bloqueante: ¿Ya pasaron 4000 ms?
-            if (tiempoActual - tiempoUltimaAccion >= 4000) 
-            {
-                gestorRed.reconocerRespuesta(); // Limpiamos el gestor
-                estadoActual = IDLE;
-            }
-            break;
-
-        case MOSTRANDO_ERROR:
-            if (dibujarPantalla) gestorUI.mostrarError(); // Se dibuja una sola vez
-
-            // Evaluación no bloqueante: ¿Ya pasaron 4000 ms?
-            if (tiempoActual - tiempoUltimaAccion >= 4000) 
-            {
-                gestorRed.reconocerRespuesta(); // Limpiamos el gestor
-                estadoActual = IDLE;
-            }
-            break;
-
-        case EMERGENCIA:
-            if (dibujarPantalla)
-            {
-                gestorUI.mostrarEmergencia();
-                // digitalWrite(BUZZER_PIN, HIGH); // Encender sirena
-            }
-
-            // Estado Enclavado: Solo se sale manteniendo "Cancelar" por 5 segundos
-            if (gestorBotonCancelar.estaMantenido())
-            {
-                // gestorEmergencia.dispararAlerta();
-                estadoActual = IDLE;
-            }
-            break;
     }
+    break;
+
+    //------------------------------------------
+    case IDLE:
+    {
+        switch (evento.tipo) {
+
+            case EV_CONTINUE:
+                if (cambioEstado) {
+                    gestorUI.mostrarPantallaReposo();
+                    indiceContacto = 0;
+                }
+                break;
+
+            case EV_BTN_ARRIBA:
+            case EV_BTN_ABAJO:
+                tiempoUltimaAccion = tiempoActual;
+                estadoActual = NAVEGANDO;
+                break;
+
+            case EV_BTN_EMERGENCIA:
+                estadoActual = EMERGENCIA;
+                break;
+        }
+    }
+    break;
+
+    //------------------------------------------
+    case NAVEGANDO:
+    {
+        switch (evento.tipo) {
+
+            case EV_CONTINUE:
+                if (cambioEstado || indiceActual != indiceContacto)
+                    gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
+                indiceActual = indiceContacto;
+                break;
+
+            case EV_BTN_ABAJO:
+                indiceContacto = min(indiceContacto + 1, 9);
+                tiempoUltimaAccion = tiempoActual;
+                break;
+
+            case EV_BTN_ARRIBA:
+                indiceContacto = max(indiceContacto - 1, 0);
+                tiempoUltimaAccion = tiempoActual;
+                break;
+
+            case EV_BTN_CONFIRMAR:
+                tiempoUltimaAccion = tiempoActual;
+                estadoActual = CONFIRMAR_CONTACTO;
+                break;
+
+            case EV_BTN_EMERGENCIA:
+                estadoActual = EMERGENCIA;
+                break;
+        }
+
+        if (tiempoActual - tiempoUltimaAccion >= TIMEOUT_NAVEGANDO)
+            estadoActual = IDLE;
+    }
+    break;
+
+    //------------------------------------------
+    case CONFIRMAR_CONTACTO:
+    {
+        switch (evento.tipo) {
+
+            case EV_CONTINUE:
+                if (cambioEstado)
+                    gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
+                break;
+
+            case EV_BTN_CANCELAR:
+                estadoActual = NAVEGANDO;
+                break;
+
+            case EV_BTN_CONFIRMAR:
+                tiempoUltimaAccion = tiempoActual;
+                estadoActual = MENSAJE_PREDEFINIDO;
+                break;
+
+            case EV_BTN_GRABAR:
+                gestorAudio.confirmarInicioGrabacion();
+                if (gestorBotonGrabar.estaMantenido()) {
+                    tiempoInicioGrabacion = tiempoActual;
+                    gestorAudio.iniciarGrabacion();
+                    estadoActual = GRABANDO;
+                }
+                break;
+
+            case EV_BTN_EMERGENCIA:
+                // No sé si sea 100% necesario detener la grabación, pero me suena coherente a pesar de la emergencia
+                // gestorAudio.detenerGrabacion();
+                estadoActual = EMERGENCIA;
+                break;
+        }
+    }
+    break;
+
+    //------------------------------------------
+    case GRABANDO:
+    {
+        switch (evento.tipo) {
+
+            case EV_CONTINUE:
+                if (cambioEstado)
+                    gestorUI.mostrarGrabando(listaContactos[indiceContacto]);
+                break;
+
+            case EV_BTN_GRABAR:
+                gestorAudio.detenerGrabacion();
+                //gestorRed.iniciarEnvioMensaje();
+                estadoActual = CONFIRMAR_AUDIO;
+                break;
+
+            case EV_BTN_EMERGENCIA:
+                gestorAudio.detenerGrabacion();
+                estadoActual = EMERGENCIA;
+                break;
+        }
+    }
+    break;
+
+    case MENSAJE_PREDEFINIDO:
+    {
+        switch (evento.tipo) {
+            case EV_CONTINUE:
+                if (cambioEstado || indiceMensaje != indiceMensajeActual)
+                    gestorUI.mostrarMensajesPredefinidos(listaContactos[indiceContacto], listaMensajes, indiceMensaje);
+                indiceMensajeActual = indiceMensaje;
+                break;
+
+            case EV_BTN_ABAJO:
+                indiceMensaje = (indiceMensaje == 2) ? 2 : indiceMensaje + 1;
+                tiempoUltimaAccion = tiempoActual;
+                break;
+            
+            case EV_BTN_ARRIBA:
+                indiceMensaje = (indiceMensaje == 0) ? 0 : indiceMensaje - 1;
+                tiempoUltimaAccion = tiempoActual;
+                break;
+
+            case EV_BTN_CONFIRMAR:
+                //gestorRed.iniciarEnvioMensaje();
+                //gestorRed.enviarMensajeTexto(listaContactos[indiceContacto], listaMensajes[indiceMensaje]);
+                tiempoUltimaAccion = tiempoActual;
+                estadoActual = ESPERANDO_WIFI;
+                break;
+
+            case EV_BTN_CANCELAR:
+                tiempoUltimaAccion = tiempoActual;
+                estadoActual = CONFIRMAR_CONTACTO;
+                break;
+
+            case EV_BTN_EMERGENCIA:
+                estadoActual = EMERGENCIA;
+                break;
+
+        }
+    }
+    break;
+
+    //------------------------------------------
+    case CONFIRMAR_AUDIO:
+    {
+        switch (evento.tipo) {
+
+            case EV_CONTINUE:
+                if (cambioEstado)
+                    gestorUI.mostrarConfirmarAudio();
+                break;
+
+            case EV_BTN_CONFIRMAR:
+                //gestorRed.iniciarEnvioMensaje();
+                estadoActual = ESPERANDO_WIFI;
+                break;
+
+            case EV_BTN_CANCELAR:
+                estadoActual = CONFIRMAR_CONTACTO;
+                break;
+
+            case EV_BTN_EMERGENCIA:
+                estadoActual = EMERGENCIA;
+                break;
+        }
+    }
+    break;
+
+    //------------------------------------------
+    case ESPERANDO_WIFI:
+    {
+        switch (evento.tipo) {
+            // WIFI todavía no está implementado asi que por ahora se saltea esto
+            case EV_CONTINUE:
+                tiempoUltimaAccion = tiempoActual;
+                estadoActual = MOSTRANDO_EXITO;
+                break;
+
+            // case EV_WIFI_EXITO:
+            //     Acá enviaría el mensaje si puede
+            //     tiempoUltimaAccion = tiempoActual;
+            //     estadoActual = MOSTRANDO_EXITO;
+            //     break;
+
+            // case EV_WIFI_ERROR:
+            //     Acá podría guardar el mensaje en la SD para enviarlo después, bloquearse y esperar el wifi, ponerlo en segundo plano esperando, no sé
+            //     tiempoUltimaAccion = tiempoActual;
+            //     estadoActual = MOSTRANDO_ERROR;
+            //     break;
+        }
+    }
+    break;
+
+    //------------------------------------------
+    case MOSTRANDO_EXITO:
+    {
+        switch (evento.tipo) {
+
+            case EV_CONTINUE:
+                if (cambioEstado) {
+                    gestorUI.mostrarExito();
+                    delay(3000);
+                    estadoActual = NAVEGANDO;
+                }
+
+                if (tiempoActual - tiempoUltimaAccion >= 4000) {
+                    gestorRed.reconocerRespuesta();
+                    estadoActual = IDLE;
+                }
+                break;
+        }
+    }
+    break;
+
+    //------------------------------------------
+    case MOSTRANDO_ERROR:
+    {
+        switch (evento.tipo) {
+
+            case EV_CONTINUE:
+                if (cambioEstado) {
+                    gestorUI.mostrarError();
+                    estadoActual = NAVEGANDO;
+                }
+
+                if (tiempoActual - tiempoUltimaAccion >= 4000) {
+                    gestorRed.reconocerRespuesta();
+                    estadoActual = IDLE;
+                }
+                break;
+        }
+    }
+    break;
+
+    //------------------------------------------
+    case EMERGENCIA:
+    {
+        switch (evento.tipo) {
+
+            case EV_CONTINUE:
+                if (cambioEstado)
+                    gestorUI.mostrarEmergencia();
+                break;
+
+            case EV_BTN_CANCELAR:
+                if (gestorBotonCancelar.estaMantenido())
+                    estadoActual = IDLE;
+                break;
+        }
+    }
+    break;
+    }
+
+    // Consumo del evento
+    evento.tipo = EV_CONTINUE;
 }
