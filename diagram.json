@@ -124,7 +124,7 @@
       "type": "wokwi-text",
       "id": "text6",
       "top": 220.8,
-      "left": 729.6,
+      "left": 864,
       "attrs": { "text": "Emergencias\n" }
     },
     {
@@ -249,7 +249,6 @@
     [ "lcd1:GND", "bb1:tn.17", "black", [ "h0" ] ],
     [ "lcd1:SDA", "esp:D21", "violet", [ "h0" ] ],
     [ "lcd1:SCL", "esp:D22", "violet", [ "h0" ] ],
-    [ "pot1:VCC", "bb1:tp.2", "red", [ "v0", "h172", "v19.2" ] ],
     [ "pot1:GND", "bb1:tn.2", "black", [ "v9.6", "h182.4" ] ],
     [ "esp:D33", "pot1:SIG", "green", [ "v-19.2", "h-28.4" ] ],
     [ "esp:D27", "bb1:20t.a", "limegreen", [ "v0" ] ],
@@ -268,7 +267,8 @@
     [ "r4:2", "bb1:bp.36", "", [ "$bb" ] ],
     [ "led1:A", "bb1:24t.e", "", [ "$bb" ] ],
     [ "led1:C", "bb1:25t.e", "", [ "$bb" ] ],
-    [ "r5:1", "bb1:20t.a", "", [ "$bb" ] ]
+    [ "r5:1", "bb1:20t.a", "", [ "$bb" ] ],
+    [ "pot1:VCC", "bb1:bn.6", "red", [ "v230.4", "h220" ] ]
   ],
   "dependencies": {}
 }

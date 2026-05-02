@@ -18,7 +18,6 @@ private:
     int volumenActual;
 
 public:
-    // 🏗️ Constructor: Recibe todos los pines y configuraciones al instanciar
     GestorDeMicrofono(int pBuzzer, int pLed, int pVol, int frec, int bclk, int ws, int data) {
         pinBuzzer = pBuzzer;
         pinLed = pLed;
@@ -32,23 +31,21 @@ public:
         volumenActual = 0;
     }
 
-    // 🚀 Inicialización (Debe llamarse dentro del void setup)
     void iniciar() {
         pinMode(pinLed, OUTPUT);
-        digitalWrite(pinLed, LOW); // Apagado por defecto
+        digitalWrite(pinLed, LOW); 
 
         pinMode(pinBuzzer, OUTPUT);
-        digitalWrite(pinBuzzer, LOW); // Apagado por defecto
+        digitalWrite(pinBuzzer, LOW); 
 
-        // Aseguramos la resolución de 12 bits para el potenciómetro en el ESP32 (0 a 4095)
         analogReadResolution(12);
 
-        // [Futuro] Aquí irá la inicialización del driver I2S: i2s_driver_install()
-        Serial.println("🎤 Gestor de Micrófono y Feedback inicializado.");
+        // TODO Aquí irá la inicialización del driver I2S: i2s_driver_install()
+        Serial.println("Gestor de Micrófono y Feedback inicializado.");
     }
 
     // ==========================================
-    // 🎛️ CONTROL DE VOLUMEN
+    // CONTROL DE VOLUMEN
     // ==========================================
     
     // Lee el potenciómetro, lo mapea a porcentaje (0-100) y lo devuelve
@@ -67,7 +64,7 @@ public:
     }
 
     // ==========================================
-    // 💡 FEEDBACK VISUAL Y AUDITIVO
+    // FEEDBACK VISUAL Y AUDITIVO
     // ==========================================
 
     void encenderLed() {
@@ -79,7 +76,7 @@ public:
     }
 
     void encenderBuzzer() {
-        // En ESP32, tone() genera una onda cuadrada a la frecuencia especificada
+        // tone() genera una onda cuadrada a la frecuencia especificada
         tone(pinBuzzer, frecuenciaPitido);
     }
 
@@ -88,25 +85,25 @@ public:
     }
 
     // ==========================================
-    // 🎙️ PLACEHOLDERS PARA EL AUDIO I2S
+    // PLACEHOLDERS PARA EL AUDIO I2S
     // ==========================================
 
     void confirmarInicioGrabacion() {
         apagarLed(); // El LED avisa que se está grabando
         encenderBuzzer();         
         Serial.println("Boton de \"Grabar\" presionado");
-        // [Futuro] Lógica de lectura I2S y escritura en SD
+        // TODO Lógica de lectura I2S y escritura en SD
     }
     void iniciarGrabacion() {
         encenderLed(); // El LED avisa que se está grabando
         apagarBuzzer();         
-        Serial.println("🔴 Grabando audio...");
-        // [Futuro] Lógica de lectura I2S y escritura en SD
+        Serial.println("Grabando audio...");
+        // TODO Lógica de lectura I2S y escritura en SD
     }
 
     void detenerGrabacion() {
         apagarLed();
-        Serial.println("⬛ Grabación detenida.");
-        // [Futuro] Lógica para cerrar el archivo WAV
+        Serial.println("Grabación detenida.");
+        // TODO Lógica para cerrar el archivo WAV
     }
 };
