@@ -30,8 +30,6 @@ class GestorAlmacenamiento
 
     void abrirArchivo(const String archivo)
     {
-        //if (archivoAbierto)
-        //archivoAbierto.close();
 
         archivoAbierto = SD.open(archivo, FILE_WRITE);
         ruta = archivo;
@@ -62,7 +60,7 @@ class GestorAlmacenamiento
         while (archivoLeer.available())
         {
             archivoLeer.read(lectura, TAMANO_DATO);
-            datoFinal = lectura[0] + lectura[1] * 256; //Magia negra? A la izquierda están los bits más significativos, rearmo el número
+            datoFinal = lectura[0] + lectura[1] * 256; 
             //Mostramos el "audio" guardado en el archivo
             Serial.printf("%d\n\r", datoFinal);
         }

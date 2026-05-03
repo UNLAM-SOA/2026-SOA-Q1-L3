@@ -132,6 +132,7 @@ const unsigned long TIMEOUT_GENERAL = 30000;   // 30 segundos
 const unsigned long TIMEOUT_GRABACION = 60000; // 60 segundos por mensaje
 
 // --- Variables de Datos (Mockups) ---
+//Por ahora los hardcodeamos, eventualmente van a llegar por wi-fi
 String listaContactos[10] = {
     "Hijo - Lucas", "Dra. Garcia", "Emergencias", "Vecino Juan",
     "Farmacia", "Hija - Maria", "Sobrino Alex", "Cuidado 24hs",
@@ -142,8 +143,6 @@ int indiceContacto = 0;
 int indiceActual = 0;
 int indiceMensajeActual = 0;
 int indiceMensaje = 0;
-bool mensajeCorrecto = true;
-bool esperandoLiberacionInicial = true;
 GestorDeRed::EstadoRespuesta respuestaMensaje;
 
 // ==========================================
@@ -209,17 +208,6 @@ void setup()
 
     // Inicialización del Bus I2C (Pantalla LCD)
     Wire.begin(LCD_SDA, LCD_SCL);
-
-    /*SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-
-    if (!SD.begin(SD_CS))
-    {
-        Serial.println("ERROR: No se detectó Tarjeta SD o falló el montaje.");
-    }
-    else
-    {
-        Serial.println("Tarjeta SD montada correctamente.");
-    }*/
     if (!gestorSD.iniciarSD())
     {
         Serial.println("ERROR: No se detectó Tarjeta SD o falló el montaje.");
@@ -508,7 +496,6 @@ void taskFSM(void *pvParameters)
 
                 case EV_BTN_GRABAR:
                     gestorAudio.detenerGrabacion();
-                    // gestorRed.iniciarEnvioMensaje();
                     estadoActual = CONFIRMAR_AUDIO;
                     break;
 
