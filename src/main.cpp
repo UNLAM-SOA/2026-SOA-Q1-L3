@@ -1,7 +1,5 @@
 #include <Arduino.h>
 #include <Wire.h>
-#include <SPI.h>
-#include <SD.h>
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -11,9 +9,10 @@
 #include "GestorInterfaz.h"
 #include "GestorBoton.h"
 #include "GestorDeRed.h"
+#include "GestorAlmacenamiento.h"
 #include "GestorMicrofono.h"
 
-#define SERIAL_ENABLED 1
+#define SERIAL_ENABLED 0
 #if SERIAL_ENABLED
 #define SerialPrint(str) Serial.println(str)
 #else
@@ -163,6 +162,7 @@ GestorBoton gestorBotonEmergencia(BTN_EMERGENCIA, BTN_EMERGENCIA_TIEMPO);
 GestorBoton gestorBotonCancelar(BTN_CANCELAR, BTN_CANCELAR_TIEMPO);
 
 GestorDeRed gestorRed;
+GestorAlmacenamiento gestorSD(SD_CS, SD_SCK, SD_MISO, SD_MOSI);
 GestorDeMicrofono gestorAudio(BUZZER_PIN, LED_PIN, POT_PIN, FREC_BUZZER, MIC_SCK, MIC_WS, MIC_SD);
 
 QueueHandle_t colaEventos;
@@ -210,9 +210,17 @@ void setup()
     // Inicialización del Bus I2C (Pantalla LCD)
     Wire.begin(LCD_SDA, LCD_SCL);
 
-    SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+    /*SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
 
     if (!SD.begin(SD_CS))
+    {
+        Serial.println("ERROR: No se detectó Tarjeta SD o falló el montaje.");
+    }
+    else
+    {
+        Serial.println("Tarjeta SD montada correctamente.");
+    }*/
+    if (!gestorSD.iniciarSD())
     {
         Serial.println("ERROR: No se detectó Tarjeta SD o falló el montaje.");
     }
@@ -222,6 +230,7 @@ void setup()
     }
 
     // TODO Inicialización del Micrófono (I2S)
+    gestorAudio.setAlmacenamiento(&gestorSD);
 
     Serial.println("Setup completado. Iniciando FSM...");
     gestorUI.iniciar();
@@ -472,7 +481,7 @@ void taskFSM(void *pvParameters)
                     if (gestorBotonGrabar.estaMantenido())
                     {
                         tiempoInicioGrabacion = tiempoActual;
-                        gestorAudio.iniciarGrabacion();
+                        gestorAudio.iniciarGrabacion("/archivoAudio.bin");
                         estadoActual = GRABANDO;
                     }
                     break;
@@ -491,6 +500,8 @@ void taskFSM(void *pvParameters)
                 {
 
                 case EV_CONTINUE:
+                    //Simulamos la grabación del micrófono
+                    gestorAudio.registrarMedida();
                     if (cambioEstado)
                         gestorUI.mostrarGrabando(listaContactos[indiceContacto]);
                     break;
@@ -560,14 +571,18 @@ void taskFSM(void *pvParameters)
 
                 case EV_BTN_CONFIRMAR:
                     estadoActual = ESPERANDO_WIFI;
+                    gestorSD.leerArchivo();
+                    gestorSD.eliminarArchivo();
                     break;
 
                 case EV_BTN_CANCELAR:
                     estadoActual = CONFIRMAR_CONTACTO;
+                    gestorSD.eliminarArchivo();
                     break;
 
                 case EV_BTN_EMERGENCIA:
                     estadoActual = EMERGENCIA;
+                    gestorSD.eliminarArchivo();
                     break;
                 }
             }

@@ -17,6 +17,9 @@ private:
     // --- Estado Interno ---
     int volumenActual;
 
+    //Para almacenar el audio
+    GestorAlmacenamiento *gestorAlmacenamiento;
+
 public:
     GestorDeMicrofono(int pBuzzer, int pLed, int pVol, int frec, int bclk, int ws, int data) {
         pinBuzzer = pBuzzer;
@@ -29,6 +32,10 @@ public:
         pinMicDATA = data;
         
         volumenActual = 0;
+    }
+
+    void setAlmacenamiento(GestorAlmacenamiento *gestor){
+        gestorAlmacenamiento = gestor;
     }
 
     void iniciar() {
@@ -94,16 +101,25 @@ public:
         Serial.println("Boton de \"Grabar\" presionado");
         // TODO Lógica de lectura I2S y escritura en SD
     }
-    void iniciarGrabacion() {
+
+    void iniciarGrabacion(const String ruta) {
         encenderLed(); // El LED avisa que se está grabando
         apagarBuzzer();         
         Serial.println("Grabando audio...");
         // TODO Lógica de lectura I2S y escritura en SD
+        gestorAlmacenamiento->abrirArchivo(ruta);
+    }
+
+    //Como no tenemos micrófono, tomamos una medida del potenciómetro que lo simula en cada ciclo de la FSM
+    void registrarMedida()
+    {
+        uint16_t lectura = analogRead(pinMicDATA);
+        gestorAlmacenamiento->guardarDato((uint8_t*)&lectura);
     }
 
     void detenerGrabacion() {
         apagarLed();
+        gestorAlmacenamiento->cerrarArchivo();
         Serial.println("Grabación detenida.");
-        // TODO Lógica para cerrar el archivo WAV
     }
 };
