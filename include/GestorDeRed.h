@@ -42,6 +42,7 @@ public:
     }
 
 private:
+    // Funcion sin utilizar pero mockeada para una implementación futura
     bool hayRespuestaDelServidor() {
         // Simulación: 2% de probabilidad de éxito por cada ciclo
         if (random(0, 100) < 2) return true; 
