@@ -56,13 +56,12 @@ public:
     // ==========================================
     
     // Lee el potenciómetro, lo mapea a porcentaje (0-100) y lo devuelve
-    int leerYActualizarVolumen() {
+    void leerYActualizarVolumen() {
         int lecturaCruda = analogRead(pinVolumen);
         
         // Mapeamos el valor crudo (0 - 4095) a un porcentaje amigable (0 - 100)
         volumenActual = map(lecturaCruda, 0, 4095, 0, 100);
         
-        return volumenActual;
     }
 
     // Devuelve el último volumen leído sin volver a consultar el hardware
@@ -83,8 +82,12 @@ public:
     }
 
     void encenderBuzzer() {
-        // tone() genera una onda cuadrada a la frecuencia especificada
-        tone(pinBuzzer, frecuenciaPitido);
+        // 3. Mapeamos el porcentaje (1-100) a un rango de frecuencias audibles.
+        // 500 Hz es un tono grave (volumen bajo) y 2500 Hz es agudo (volumen alto).
+        int frecuenciaDinamica = map(volumenActual, 1, 100, 500, 2500);
+        
+        // 4. Emitimos el tono calculado
+        tone(pinBuzzer, frecuenciaDinamica);
     }
 
     void apagarBuzzer() {
