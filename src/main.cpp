@@ -292,7 +292,7 @@ void taskEvento(void *pvParameters)
     while (1)
     {
         #if SERIAL_ENABLED
-                eventoAnterior.tipo = evento.tipo;
+            eventoAnterior.tipo = evento.tipo;
         #endif
         evento.tipo = EV_CONTINUE;
         uint32_t notificaciones = 0;
@@ -351,14 +351,18 @@ void taskEvento(void *pvParameters)
             }
         }
 
-        xQueueSend(colaEventos, &evento.tipo, portMAX_DELAY);
+        
 
         #if SERIAL_ENABLED
-                if (eventoAnterior.tipo != evento.tipo)
-                    SerialPrint("Evento detectado y encolado: " + eventoToString(eventoAnterior.tipo));
+            if (evento.tipo != eventoAnterior.tipo)
+                {
+                    SerialPrint("Evento actual: " + eventoToString(evento.tipo));
+                }
         #endif
+        //xQueueSend va debajo porque sino genera una race condition y no permite visualizar correctamente el debug
+        xQueueSend(colaEventos, &evento.tipo, portMAX_DELAY);
         // Verifica cada 50ms, de este modo reducimos el uso del CPU
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -702,7 +706,7 @@ void taskFSM(void *pvParameters)
                     if (cambioEstado)
                     {
                         gestorUI.mostrarExito();
-                        delay(TIMEOUT_EXITO_FRACASO);
+                        vTaskDelay(TIMEOUT_EXITO_FRACASO);
                         estadoActual = NAVEGANDO;
                         gestorSD.eliminarArchivo();
                         xTimerStart(xTimeoutTimer, 0);
@@ -722,7 +726,7 @@ void taskFSM(void *pvParameters)
                     if (cambioEstado)
                     {
                         gestorUI.mostrarError();
-                        delay(TIMEOUT_EXITO_FRACASO);
+                        vTaskDelay(TIMEOUT_EXITO_FRACASO);
                         estadoActual = NAVEGANDO;
                         gestorSD.eliminarArchivo();
                         xTimerStart(xTimeoutTimer, 0);

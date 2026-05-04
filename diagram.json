@@ -123,8 +123,8 @@
     {
       "type": "wokwi-text",
       "id": "text6",
-      "top": 220.8,
-      "left": 729.6,
+      "top": 211.2,
+      "left": 844.8,
       "attrs": { "text": "Emergencias\n" }
     },
     {
@@ -181,20 +181,6 @@
       "top": -228,
       "left": 433.8,
       "attrs": { "volume": "0.1" }
-    },
-    {
-      "type": "wokwi-text",
-      "id": "text7",
-      "top": -412.8,
-      "left": 316.8,
-      "attrs": { "text": "Ver bien como conectar el buzzer\n" }
-    },
-    {
-      "type": "wokwi-text",
-      "id": "text8",
-      "top": 259.2,
-      "left": 643.2,
-      "attrs": { "text": "Estos dos si pueden usar la R interna del ESP32" }
     },
     { "type": "wokwi-potentiometer", "id": "pot2", "top": 113.9, "left": 259, "attrs": {} },
     {
@@ -264,6 +250,11 @@
     [ "esp:D26", "bb1:29t.e", "limegreen", [ "v48", "h412.9" ] ],
     [ "bz1:2", "bb1:29t.a", "red", [ "v0" ] ],
     [ "bz1:1", "bb1:tn.19", "black", [ "v9.6", "h-19.2" ] ],
+    [ "pot2:GND", "bb1:bn.2", "black", [ "v19.2", "h-38.4", "v-105.6", "v-27.5" ] ],
+    [ "pot2:SIG", "bb1:15b.i", "green", [ "v9.6", "h47.6" ] ],
+    [ "pot1:VCC", "bb1:bp.6", "red", [ "v19.2", "h47.2", "v-96", "h67.2" ] ],
+    [ "pot1:GND", "bb1:bn.5", "black", [ "v9.6", "h-48", "v-86.4", "h105.6", "v-9.6", "h57.6" ] ],
+    [ "pot2:VCC", "bb1:bp.13", "red", [ "v19.2", "h-0.8" ] ],
     [ "r1:1", "bb1:23b.g", "", [ "$bb" ] ],
     [ "r1:2", "bb1:bp.18", "", [ "$bb" ] ],
     [ "r2:1", "bb1:30b.g", "", [ "$bb" ] ],
@@ -274,12 +265,7 @@
     [ "r4:2", "bb1:bp.36", "", [ "$bb" ] ],
     [ "led1:A", "bb1:24t.e", "", [ "$bb" ] ],
     [ "led1:C", "bb1:25t.e", "", [ "$bb" ] ],
-    [ "r5:1", "bb1:20t.a", "", [ "$bb" ] ],
-    [ "pot2:GND", "bb1:bn.2", "black", [ "v19.2", "h-38.4", "v-105.6", "v-27.5" ] ],
-    [ "pot2:SIG", "bb1:15b.i", "green", [ "v9.6", "h47.6" ] ],
-    [ "pot1:VCC", "bb1:bp.6", "red", [ "v19.2", "h47.2", "v-96", "h67.2" ] ],
-    [ "pot1:GND", "bb1:bn.5", "black", [ "v9.6", "h-48", "v-86.4", "h105.6", "v-9.6", "h57.6" ] ],
-    [ "pot2:VCC", "bb1:bp.13", "red", [ "v19.2", "h-0.8" ] ]
+    [ "r5:1", "bb1:20t.a", "", [ "$bb" ] ]
   ],
   "dependencies": {}
 }
