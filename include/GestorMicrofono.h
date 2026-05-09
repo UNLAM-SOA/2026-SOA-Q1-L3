@@ -1,6 +1,13 @@
 #pragma once
 #include <Arduino.h>
 
+#define MIN_LECTURA_ANALOGICA 0
+#define MAX_LECTURA_ANALOGICA 4095
+#define MIN_VOL 1
+#define MAX_VOL 100
+#define MIN_FREC 500
+#define MAX_FREC 2500
+
 class GestorDeMicrofono {
 private:
     // --- Atributos de Hardware ---
@@ -59,8 +66,8 @@ public:
     void leerYActualizarVolumen() {
         int lecturaCruda = analogRead(pinVolumen);
         
-        // Mapeamos el valor crudo (0 - 4095) a un porcentaje amigable (0 - 100)
-        volumenActual = map(lecturaCruda, 0, 4095, 0, 100);
+        // Mapeamos el valor crudo (0 - 4095) a un porcentaje amigable (1 - 100)
+        volumenActual = map(lecturaCruda, MIN_LECTURA_ANALOGICA, MAX_LECTURA_ANALOGICA, MIN_VOL, MAX_VOL);
         
     }
 
@@ -84,7 +91,7 @@ public:
     void encenderBuzzer() {
         // 3. Mapeamos el porcentaje (1-100) a un rango de frecuencias audibles.
         // 500 Hz es un tono grave (volumen bajo) y 2500 Hz es agudo (volumen alto).
-        int frecuenciaDinamica = map(volumenActual, 1, 100, 500, 2500);
+        int frecuenciaDinamica = map(volumenActual, MIN_VOL, MAX_VOL, MIN_FREC, MAX_FREC);
         
         // 4. Emitimos el tono calculado
         tone(pinBuzzer, frecuenciaDinamica);

@@ -22,6 +22,7 @@
 #define MAX_EVENTOS 11
 #define MAX_CONTACTOS 10
 #define MAX_MENSAJES 3
+#define CANT_PINES 40
 
 // --- Variables de Control de Tiempo (Timeouts) ---
 #define TIMEOUT_GENERAL (SERIAL_ENABLED == 1) ? 4000 : 30000   // 30 segundos
@@ -30,6 +31,9 @@
 #define BTN_EMERGENCIA_TIEMPO (SERIAL_ENABLED == 1) ? 2000 : 5000
 #define DELAY_INIT 3000
 #define TIMEOUT_EXITO_FRACASO 4000
+#define BITS_RESOLUCION 12 
+#define TAM_STACK_GET_EVENT 2048
+#define TAM_STACK_FSM 4096
 
 // Timers
 #define BIT_TIMEOUT (1 << 0)
@@ -190,7 +194,7 @@ permite leer correctamente los clicks
 */
 bool leerBotonUnClic(int pin)
 {
-    static bool estadoAnterior[40]; // uno por pin
+    static bool estadoAnterior[CANT_PINES]; // uno por pin
 
     bool estadoActual = digitalRead(pin);
 
@@ -227,7 +231,7 @@ void setup()
     pinMode(BTN_EMERGENCIA, INPUT_PULLUP);
 
     // Resolucion 12 bits, 0 a 4096
-    analogReadResolution(12);
+    analogReadResolution(BITS_RESOLUCION);
 
     // Inicialización del Bus I2C (Pantalla LCD)
     Wire.begin(LCD_SDA, LCD_SCL);
@@ -250,8 +254,8 @@ void setup()
 
     if (colaEventos != NULL)
     {
-        xTaskCreate(taskEvento, "GeneradorEventos", 2048, NULL, 1, &getEventHandler);
-        xTaskCreate(taskFSM, "MaquinaEstados", 4096, NULL, 2, NULL);
+        xTaskCreate(taskEvento, "GeneradorEventos", TAM_STACK_GET_EVENT, NULL, 1, &getEventHandler);
+        xTaskCreate(taskFSM, "MaquinaEstados", TAM_STACK_FSM, NULL, 2, NULL);
         Serial.println("Tareas creadas");
     }
 
@@ -378,9 +382,9 @@ void taskFSM(void *pvParameters)
         if (xQueueReceive(colaEventos, &eventoRecibido, portMAX_DELAY) == pdPASS)
         {
             evento.tipo = eventoRecibido;
-            bool cambioEstado = (estadoActual != estadoAnterior);
             estadoAnterior = estadoActual;
-            if (SERIAL_ENABLED && cambioEstado)
+
+            if (SERIAL_ENABLED && estadoActual != estadoAnterior)
             {
                 SerialPrint("-------------------------------------------------------\n");
                 SerialPrint("Estado actual: " + estadoToString(estadoActual) + "\n");
@@ -397,6 +401,8 @@ void taskFSM(void *pvParameters)
                 case EV_CONTINUE:
                     gestorUI.mostrarPantallaInit();
                     delay(DELAY_INIT);
+                    gestorUI.mostrarPantallaReposo();
+                    indiceContacto = 0;
                     estadoActual = IDLE;
                     break;
                 }
@@ -408,24 +414,17 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-
-                case EV_CONTINUE:
-                    if (cambioEstado)
-                    {
-                        gestorUI.mostrarPantallaReposo();
-                        indiceContacto = 0;
-                    }
-                    break;
-
                 case EV_BTN_ARRIBA:
                 case EV_BTN_ABAJO:
                     estadoActual = NAVEGANDO;
                     xTimerStart(xTimeoutTimer, 0);
+                    gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
                     break;
 
                 case EV_BTN_EMERGENCIA:
                     estadoActual = EMERGENCIA;
                     xTimerStop(xTimeoutTimer, 0);
+                    gestorUI.mostrarEmergencia();
                     break;
                 
                 case EV_BTN_EMERGENCIA_PRESS:
@@ -441,31 +440,32 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-
-                case EV_CONTINUE:
-                    if (cambioEstado || indiceActual != indiceContacto)
-                        gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
-                    indiceActual = indiceContacto;
-                    break;
-
                 case EV_BTN_ABAJO:
                     indiceContacto = min(indiceContacto + 1, 9);
+                    if (indiceActual != indiceContacto)
+                        gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
+                    indiceActual = indiceContacto;
                     xTimerReset(xTimeoutTimer, 0);
                     break;
 
                 case EV_BTN_ARRIBA:
                     indiceContacto = max(indiceContacto - 1, 0);
+                    if (indiceActual != indiceContacto)
+                        gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
+                    indiceActual = indiceContacto;
                     xTimerReset(xTimeoutTimer, 0);
                     break;
 
                 case EV_BTN_CONFIRMAR:
                     estadoActual = CONFIRMAR_CONTACTO;
                     xTimerReset(xTimeoutTimer, 0);
+                    gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
                     break;
 
                 case EV_BTN_EMERGENCIA:
                     estadoActual = EMERGENCIA;
                     xTimerStop(xTimeoutTimer, 0);
+                    gestorUI.mostrarEmergencia();
                     break;
                 case EV_BTN_EMERGENCIA_PRESS:
                     xTimerReset(xTimeoutTimer, 0);
@@ -474,6 +474,8 @@ void taskFSM(void *pvParameters)
                 case EV_TIMEOUT:
                     estadoActual = IDLE;
                     xTimerStop(xTimeoutTimer, 0);
+                    gestorUI.mostrarPantallaReposo();
+                    indiceContacto = 0;
                     break;
                 }
             }
@@ -484,20 +486,16 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-
-                case EV_CONTINUE:
-                    if (cambioEstado)
-                        gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
-                    break;
-
                 case EV_BTN_CANCELAR:
                     estadoActual = NAVEGANDO;
+                    gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
                     xTimerReset(xTimeoutTimer, 0);
                     break;
 
                 case EV_BTN_CONFIRMAR:
                     estadoActual = MENSAJE_PREDEFINIDO;
                     xTimerReset(xTimeoutTimer, 0);
+                    gestorUI.mostrarMensajesPredefinidos(listaContactos[indiceContacto], listaMensajes, indiceMensaje);
                     break;
 
                 case EV_BTN_GRABAR:
@@ -506,11 +504,14 @@ void taskFSM(void *pvParameters)
                     xTimerStart(xBuzzerTimer, 0);
                     gestorAudio.leerYActualizarVolumen();
                     estadoActual = INICIANDO_GRABACION;
+                    gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
+                    gestorAudio.leerYActualizarVolumen();
                     break;
 
                 case EV_BTN_EMERGENCIA:
                     estadoActual = EMERGENCIA;
                     xTimerStop(xTimeoutTimer, 0);
+                    gestorUI.mostrarEmergencia();
                     break;
 
                 case EV_BTN_EMERGENCIA_PRESS:
@@ -518,6 +519,8 @@ void taskFSM(void *pvParameters)
                     break;
                 case EV_TIMEOUT:
                     estadoActual = IDLE;
+                    gestorUI.mostrarPantallaReposo();
+                    indiceContacto = 0;
                     xTimerStop(xTimeoutTimer, 0);
                     break;
                 }
@@ -528,19 +531,12 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-                case EV_CONTINUE:
-                    if (cambioEstado)
-                    {
-                        gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
-                        gestorAudio.leerYActualizarVolumen();
-                    }
-                    break;
-
                 case EV_BUZZER_FIN:
                     gestorAudio.iniciarGrabacion("/archivoAudio.bin");
                     estadoActual = GRABANDO;
                     xTimerStop(xBuzzerTimer, 0);
                     xTimerStart(xRecordingTimer, 0);
+                    gestorUI.mostrarGrabando(listaContactos[indiceContacto]);
                     break;
 
                 case EV_BTN_CANCELAR:
@@ -548,6 +544,7 @@ void taskFSM(void *pvParameters)
                     estadoActual = CONFIRMAR_CONTACTO;
                     xTimerStop(xBuzzerTimer, 0);
                     xTimerStart(xTimeoutTimer, 0);
+                    gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
                     break;
                 }
                 // No hay tiempo suficiente para activar el boton de emergencia, por tanto no es necesario modelarlo.
@@ -563,14 +560,13 @@ void taskFSM(void *pvParameters)
                 case EV_CONTINUE:
                     // Simulamos la grabación del micrófono
                     gestorAudio.registrarMedida();
-                    if (cambioEstado)
-                        gestorUI.mostrarGrabando(listaContactos[indiceContacto]);
                     break;
 
                 case EV_BTN_GRABAR:
                     gestorAudio.detenerGrabacion();
                     // gestorRed.iniciarEnvioMensaje();
                     estadoActual = CONFIRMAR_AUDIO;
+                    gestorUI.mostrarConfirmarAudio();
                     xTimerStop(xRecordingTimer, 0);
                     xTimerStart(xTimeoutTimer, 0);
                     break;
@@ -578,11 +574,13 @@ void taskFSM(void *pvParameters)
                 case EV_BTN_EMERGENCIA:
                     gestorAudio.detenerGrabacion();
                     estadoActual = EMERGENCIA;
+                    gestorUI.mostrarEmergencia();
                     xTimerStop(xRecordingTimer, 0);
                     break;
                 case EV_TIMEOUT:
                     gestorAudio.detenerGrabacion();
                     estadoActual = CONFIRMAR_AUDIO;
+                    gestorUI.mostrarConfirmarAudio();
                     xTimerStop(xRecordingTimer, 0);
                     xTimerStart(xTimeoutTimer, 0);
                     break;
@@ -594,19 +592,19 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-                case EV_CONTINUE:
-                    if (cambioEstado || indiceMensaje != indiceMensajeActual)
-                        gestorUI.mostrarMensajesPredefinidos(listaContactos[indiceContacto], listaMensajes, indiceMensaje);
-                    indiceMensajeActual = indiceMensaje;
-                    break;
-
                 case EV_BTN_ABAJO:
                     indiceMensaje = (indiceMensaje == 2) ? 2 : indiceMensaje + 1;
+                    if (indiceMensaje != indiceMensajeActual)
+                        gestorUI.mostrarMensajesPredefinidos(listaContactos[indiceContacto], listaMensajes, indiceMensaje);
+                    indiceMensajeActual = indiceMensaje;
                     xTimerReset(xTimeoutTimer, 0);
                     break;
 
                 case EV_BTN_ARRIBA:
                     indiceMensaje = (indiceMensaje == 0) ? 0 : indiceMensaje - 1;
+                    if (indiceMensaje != indiceMensajeActual)
+                        gestorUI.mostrarMensajesPredefinidos(listaContactos[indiceContacto], listaMensajes, indiceMensaje);
+                    indiceMensajeActual = indiceMensaje;
                     xTimerReset(xTimeoutTimer, 0);
                     break;
 
@@ -618,17 +616,21 @@ void taskFSM(void *pvParameters)
                 case EV_BTN_CANCELAR:
                     estadoActual = CONFIRMAR_CONTACTO;
                     xTimerReset(xTimeoutTimer, 0);
+                    gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
                     break;
 
                 case EV_BTN_EMERGENCIA:
                     estadoActual = EMERGENCIA;
                     xTimerStop(xTimeoutTimer, 0);
+                    gestorUI.mostrarEmergencia();
                     break;
                 case EV_BTN_EMERGENCIA_PRESS:
                     xTimerReset(xTimeoutTimer, 0);
                     break;
                 case EV_TIMEOUT:
                     estadoActual = IDLE;
+                    gestorUI.mostrarPantallaReposo();
+                    indiceContacto = 0;
                     xTimerStop(xTimeoutTimer, 0);
                     break;
                 }
@@ -640,12 +642,6 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-
-                case EV_CONTINUE:
-                    if (cambioEstado)
-                        gestorUI.mostrarConfirmarAudio();
-                    break;
-
                 case EV_BTN_CONFIRMAR:
                     estadoActual = ESPERANDO_WIFI;
                     gestorSD.leerArchivo();
@@ -656,12 +652,14 @@ void taskFSM(void *pvParameters)
                     estadoActual = CONFIRMAR_CONTACTO;
                     gestorSD.eliminarArchivo();
                     xTimerReset(xTimeoutTimer, 0);
+                    gestorUI.mostrarConfirmarContacto(listaContactos[indiceContacto]);
                     break;
 
                 case EV_BTN_EMERGENCIA:
                     estadoActual = EMERGENCIA;
                     gestorSD.eliminarArchivo();
                     xTimerStop(xTimeoutTimer, 0);
+                    gestorUI.mostrarEmergencia();
                     break;
                 case EV_BTN_EMERGENCIA_PRESS:
                     xTimerReset(xTimeoutTimer, 0);
@@ -682,15 +680,20 @@ void taskFSM(void *pvParameters)
                 {
                 // Funcion mockeada esperando a ser implementada a futuro
                 case EV_CONTINUE:
-                    estadoActual = MOSTRANDO_EXITO;
-                    break;
-
                 case EV_WIFI_EXITO:
                     estadoActual = MOSTRANDO_EXITO;
+                    gestorUI.mostrarExito();
+                    vTaskDelay(TIMEOUT_EXITO_FRACASO);
+                    gestorSD.eliminarArchivo();
+                    xTimerStart(xTimeoutTimer, 0);
                     break;
 
                 case EV_WIFI_ERROR:
                     estadoActual = MOSTRANDO_ERROR;
+                    gestorUI.mostrarError();
+                    vTaskDelay(TIMEOUT_EXITO_FRACASO);
+                    gestorSD.eliminarArchivo();
+                    xTimerStart(xTimeoutTimer, 0);
                     break;
                 }
             }
@@ -703,14 +706,8 @@ void taskFSM(void *pvParameters)
                 {
 
                 case EV_CONTINUE:
-                    if (cambioEstado)
-                    {
-                        gestorUI.mostrarExito();
-                        vTaskDelay(TIMEOUT_EXITO_FRACASO);
-                        estadoActual = NAVEGANDO;
-                        gestorSD.eliminarArchivo();
-                        xTimerStart(xTimeoutTimer, 0);
-                    }
+                    estadoActual = NAVEGANDO;
+                    gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
                     break;
                 }
             }
@@ -723,15 +720,8 @@ void taskFSM(void *pvParameters)
                 {
 
                 case EV_CONTINUE:
-                    if (cambioEstado)
-                    {
-                        gestorUI.mostrarError();
-                        vTaskDelay(TIMEOUT_EXITO_FRACASO);
-                        estadoActual = NAVEGANDO;
-                        gestorSD.eliminarArchivo();
-                        xTimerStart(xTimeoutTimer, 0);
-                    }
-                    break;
+                    estadoActual = NAVEGANDO;
+                    gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
                 }
             }
             break;
@@ -741,14 +731,10 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-
-                case EV_CONTINUE:
-                    if (cambioEstado)
-                        gestorUI.mostrarEmergencia();
-                    break;
-
                 case EV_BTN_CANCELAR:
                     estadoActual = IDLE;
+                    gestorUI.mostrarPantallaReposo();
+                    indiceContacto = 0;
                     break;
                 }
             }
