@@ -71,10 +71,16 @@ class GestorAlmacenamiento
         archivoLeer.close();
     }
 
-    void eliminarArchivo()
+void eliminarArchivo()
     {
-        if (SD.exists(ruta))
-            SD.remove(ruta);
+        if (ruta.length() > 1) 
+        {
+            if (SD.exists(ruta))
+            {
+                SD.remove(ruta);
+            }
+            ruta = ""; 
+        }
     }
 
     ~GestorAlmacenamiento(){
@@ -82,7 +88,12 @@ class GestorAlmacenamiento
             archivoAbierto.close();
         }
 
-        if (SD.exists(ruta))
-            SD.remove(ruta);
+        if (ruta.length() > 1) 
+        {
+            if (SD.exists(ruta))
+            {
+                SD.remove(ruta);
+            }
+        }
     }
 };
