@@ -3,6 +3,7 @@
 #include <SD.h>
 
 #define TAMANO_DATO 2
+#define AJUSTE_POR_POS 256
 
 class GestorAlmacenamiento
 {
@@ -57,12 +58,12 @@ class GestorAlmacenamiento
         //Si vamos a leer el archivo, hay que abrirlo para solo lectura
         File archivoLeer = SD.open(ruta, FILE_READ);
 
-        uint8_t lectura[2];
+        uint8_t lectura[TAMANO_DATO];
         uint16_t datoFinal;
         while (archivoLeer.available())
         {
             archivoLeer.read(lectura, TAMANO_DATO);
-            datoFinal = lectura[0] + lectura[1] * 256;
+            datoFinal = lectura[0] + lectura[1] * AJUSTE_POR_POS;
             //Mostramos el "audio" guardado en el archivo
             Serial.printf("%d\n\r", datoFinal);
         }
