@@ -13,6 +13,13 @@
 
 // MODO DEBUG
 #define SERIAL_ENABLED 0
+/*
+Si SERIAL_ENABLED vale 0, es el modo "produccion", con los tiempos reales de timeout y sin printeos de serial
+Si vale 1 los tiempos de timeout son considerablemente más cortos y sí hay printeo serial, el cual abarca
+todas las transiciones y estados. 
+Decidimos solo printear los estados y eventos cuando cambian, para no llenar la pantalla de serial prints del mismo estado
+que se terminan volviendo datos inutiles.
+*/
 #if SERIAL_ENABLED
 #define SerialPrint(str) Serial.println(str)
 #else
