@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">My Application</string>
+    <string name="title_nonofono">Nonofono</string>
+    <string name="button1_text">button1</string>
+    <string name="button2_text">button2</string>
+    <string name="button3_text">button3</string>
+    <string name="button4_text">button4</string>
+</resources>
