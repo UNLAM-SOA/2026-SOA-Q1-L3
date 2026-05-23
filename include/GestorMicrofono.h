@@ -1,12 +1,17 @@
 #pragma once
 #include <Arduino.h>
+#include <driver/i2s.h>
 
+//Frecuencia del buzzer y volumen
 #define MIN_LECTURA_ANALOGICA 0
 #define MAX_LECTURA_ANALOGICA 4095
 #define MIN_VOL 1
 #define MAX_VOL 100
 #define MIN_FREC 500
 #define MAX_FREC 2500
+
+//Lectura de audio
+#define TASA_MUESTREO 48000
 
 class GestorDeMicrofono {
 private:
@@ -54,7 +59,33 @@ public:
 
         analogReadResolution(12);
 
-        // TODO Aquí irá la inicialización del driver I2S: i2s_driver_install()
+        // Inicialización del driver I2S: i2s_driver_install()
+
+        i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+        .sample_rate = TASA_MUESTREO,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 8,
+        .dma_buf_len = 1024,
+        .use_apll = false,
+        .tx_desc_auto_clear = false,
+        .fixed_mclk = 0
+        };
+
+        i2s_pin_config_t pin_config = {
+        .bck_io_num = pinMicBCLK,
+        .ws_io_num = pinMicWS,
+        .data_out_num = I2S_PIN_NO_CHANGE,
+        .data_in_num = pinMicDATA
+        };
+
+        i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+        i2s_set_pin(I2S_NUM_0, &pin_config);
+        i2s_zero_dma_buffer(I2S_NUM_0);
+
         Serial.println("Gestor de Micrófono y Feedback inicializado.");
     }
 
@@ -117,19 +148,31 @@ public:
         apagarBuzzer();         
         Serial.println("Grabando audio...");
         // TODO Lógica de lectura I2S y escritura en SD
-        gestorAlmacenamiento->abrirArchivo(ruta);
+        gestorAlmacenamiento->abrirArchivoWAV(ruta, TASA_MUESTREO, 16, 1);
     }
 
     //Como no tenemos micrófono, tomamos una medida del potenciómetro que lo simula en cada ciclo de la FSM
     void registrarMedida()
     {
-        uint16_t lectura = analogRead(pinMicDATA);
-        gestorAlmacenamiento->guardarDato((uint8_t*)&lectura);
+        size_t bytesLeidos;
+        int32_t i2sBuffer[256];
+    
+        i2s_read(I2S_NUM_0, (void *)i2sBuffer, sizeof(i2sBuffer), &bytesLeidos, portMAX_DELAY);
+
+        int16_t muestras16Bits[256];
+        int cantidadDeMuestras = bytesLeidos / 4; //Divido por 4 porque leímos en muestras de 32 bits
+
+        for (int i = 0; i < cantidadDeMuestras; i++) {
+            muestras16Bits[i] = (int16_t)(i2sBuffer[i] >> 14);
+        }
+
+        //Multiplico por 2 porque escribimos en bytes pero las muestras que escribimos están en array de 16 bits
+        gestorAlmacenamiento->guardarDato((uint8_t*)muestras16Bits, cantidadDeMuestras * 2);
     }
 
     void detenerGrabacion() {
         apagarLed();
-        gestorAlmacenamiento->cerrarArchivo();
+        gestorAlmacenamiento->cerrarArchivoWAV();
         Serial.println("Grabación detenida.");
     }
 };

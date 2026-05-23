@@ -12,14 +12,7 @@
 #include "GestorMicrofono.h"
 
 // MODO DEBUG
-#define SERIAL_ENABLED 0
-/*
-Si SERIAL_ENABLED vale 0, es el modo "produccion", con los tiempos reales de timeout y sin printeos de serial
-Si vale 1 los tiempos de timeout son considerablemente más cortos y sí hay printeo serial, el cual abarca
-todas las transiciones y estados. 
-Decidimos solo printear los estados y eventos cuando cambian, para no llenar la pantalla de serial prints del mismo estado
-que se terminan volviendo datos inutiles.
-*/
+#define SERIAL_ENABLED 1
 #if SERIAL_ENABLED
 #define SerialPrint(str) Serial.println(str)
 #else
@@ -45,7 +38,6 @@ que se terminan volviendo datos inutiles.
 // Timers
 #define BIT_TIMEOUT (1 << 0)
 #define BIT_BUZZER_FIN (1 << 1)
-#define BIT_EXITO_O_FRACASO (2 << 1)
 
 // ==========================================
 // DEFINICIÓN DE PINES (ESP32 30-Pines)
@@ -165,7 +157,7 @@ GestorAlmacenamiento gestorSD(SD_CS, SD_SCK, SD_MISO, SD_MOSI);
 GestorDeMicrofono gestorAudio(BUZZER_PIN, LED_PIN, POT_PIN, FREC_BUZZER, MIC_SCK, MIC_WS, MIC_SD);
 
 QueueHandle_t colaEventos;
-TimerHandle_t xTimeoutTimer, xRecordingTimer, xBuzzerTimer, xSuccessOrFailTimer;
+TimerHandle_t xTimeoutTimer, xRecordingTimer, xBuzzerTimer;
 TaskHandle_t getEventHandler;
 
 // ==========================================
@@ -195,11 +187,6 @@ void vTimeoutCallback(TimerHandle_t xTimer)
 void vBuzzerCallback(TimerHandle_t xTimer)
 {
     xTaskNotify(getEventHandler, BIT_BUZZER_FIN, eSetBits);
-}
-
-void vSuccessOrFailCallback(TimerHandle_t xTimer)
-{
-    xTaskNotify(getEventHandler, BIT_EXITO_O_FRACASO, eSetBits);
 }
 /*
 esta funcion detecta el flanco descendente del click, junto con los 50ms del vTaskDelay en taskEvento
@@ -293,13 +280,6 @@ void setup()
         pdFALSE,
         NULL,
         vBuzzerCallback);
-
-    xSuccessOrFailTimer = xTimerCreate(
-        "SuccessOrFailTimer",
-        pdMS_TO_TICKS(TIMEOUT_EXITO_FRACASO),
-        pdFALSE,
-        NULL,
-        vSuccessOrFailCallback);
 }
 
 void loop()
@@ -333,7 +313,7 @@ void taskEvento(void *pvParameters)
 
         xTaskNotifyWait(0, 0xFFFFFFFF, &notificaciones, 0);
 
-        if (notificaciones & BIT_TIMEOUT || notificaciones & BIT_EXITO_O_FRACASO)
+        if (notificaciones & BIT_TIMEOUT)
         {
             evento.tipo = EV_TIMEOUT;
         }
@@ -375,8 +355,6 @@ void taskEvento(void *pvParameters)
             }
         }
 
-        
-
         #if SERIAL_ENABLED
             if (evento.tipo != eventoAnterior.tipo)
                 {
@@ -402,14 +380,14 @@ void taskFSM(void *pvParameters)
         if (xQueueReceive(colaEventos, &eventoRecibido, portMAX_DELAY) == pdPASS)
         {
             evento.tipo = eventoRecibido;
+            estadoAnterior = estadoActual;
+
             if (SERIAL_ENABLED && estadoActual != estadoAnterior)
             {
                 SerialPrint("-------------------------------------------------------\n");
                 SerialPrint("Estado actual: " + estadoToString(estadoActual) + "\n");
                 SerialPrint("-------------------------------------------------------\n");
             }
-            estadoAnterior = estadoActual;
-
             switch (estadoActual)
             {
 
@@ -552,7 +530,7 @@ void taskFSM(void *pvParameters)
                 switch (evento.tipo)
                 {
                 case EV_BUZZER_FIN:
-                    gestorAudio.iniciarGrabacion("/archivoAudio.bin");
+                    gestorAudio.iniciarGrabacion("/archivoAudio.wav");
                     estadoActual = GRABANDO;
                     xTimerStop(xBuzzerTimer, 0);
                     xTimerStart(xRecordingTimer, 0);
@@ -576,7 +554,6 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-
                 case EV_CONTINUE:
                     // Simulamos la grabación del micrófono
                     gestorAudio.registrarMedida();
@@ -701,19 +678,19 @@ void taskFSM(void *pvParameters)
                 // Funcion mockeada esperando a ser implementada a futuro
                 case EV_CONTINUE:
                 case EV_WIFI_EXITO:
-                estadoActual = MOSTRANDO_EXITO;
-                gestorUI.mostrarExito();
-                gestorSD.eliminarArchivo();
-                xTimerStart(xTimeoutTimer, 0);
-                xTimerStart(xSuccessOrFailTimer, 0);
+                    estadoActual = MOSTRANDO_EXITO;
+                    gestorUI.mostrarExito();
+                    vTaskDelay(TIMEOUT_EXITO_FRACASO);
+                    gestorSD.eliminarArchivo();
+                    xTimerStart(xTimeoutTimer, 0);
                     break;
 
                 case EV_WIFI_ERROR:
                     estadoActual = MOSTRANDO_ERROR;
+                    gestorUI.mostrarError();
                     vTaskDelay(TIMEOUT_EXITO_FRACASO);
                     gestorSD.eliminarArchivo();
                     xTimerStart(xTimeoutTimer, 0);
-                    xTimerStart(xSuccessOrFailTimer, 0);
                     break;
                 }
             }
@@ -725,21 +702,10 @@ void taskFSM(void *pvParameters)
                 switch (evento.tipo)
                 {
 
-                case EV_TIMEOUT:
-                    xTimerStop(xSuccessOrFailTimer, 0);
+                case EV_CONTINUE:
                     estadoActual = NAVEGANDO;
                     gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
                     break;
-                case EV_BTN_EMERGENCIA_PRESS:
-                    xTimerStart(xSuccessOrFailTimer, 0);
-                    break;
-                case EV_BTN_EMERGENCIA:
-                    estadoActual = EMERGENCIA;
-                    xTimerStop(xSuccessOrFailTimer, 0);
-                    xTimerStop(xTimeoutTimer, 0);
-                    gestorUI.mostrarEmergencia();
-                    break;
-
                 }
             }
             break;
@@ -750,20 +716,9 @@ void taskFSM(void *pvParameters)
                 switch (evento.tipo)
                 {
 
-                case EV_TIMEOUT:
-                    xTimerStop(xSuccessOrFailTimer, 0);
+                case EV_CONTINUE:
                     estadoActual = NAVEGANDO;
                     gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
-                    break;
-                case EV_BTN_EMERGENCIA_PRESS:
-                    xTimerStart(xSuccessOrFailTimer, 0);
-                    break;
-                case EV_BTN_EMERGENCIA:
-                    estadoActual = EMERGENCIA;
-                    xTimerStop(xSuccessOrFailTimer, 0);
-                    xTimerStop(xTimeoutTimer, 0);
-                    gestorUI.mostrarEmergencia();
-                    break;
                 }
             }
             break;
