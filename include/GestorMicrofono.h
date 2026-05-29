@@ -31,6 +31,8 @@ private:
 
     //Para almacenar el audio
     GestorAlmacenamiento *gestorAlmacenamiento;
+            int32_t i2sBuffer[256];
+        int16_t muestras16Bits[256];
 
 public:
     GestorDeMicrofono(int pBuzzer, int pLed, int pVol, int frec, int bclk, int ws, int data) {
@@ -65,7 +67,7 @@ public:
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = TASA_MUESTREO,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  
-        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT, // <-- CAMBIAR A ESTÉREO
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = 8,
@@ -73,7 +75,7 @@ public:
         .use_apll = false,
         .tx_desc_auto_clear = false,
         .fixed_mclk = 0
-        };
+    };
 
         i2s_pin_config_t pin_config = {
         .bck_io_num = pinMicBCLK,
@@ -155,19 +157,20 @@ public:
     void registrarMedida()
     {
         size_t bytesLeidos;
-        int32_t i2sBuffer[256];
-    
         i2s_read(I2S_NUM_0, (void *)i2sBuffer, sizeof(i2sBuffer), &bytesLeidos, portMAX_DELAY);
 
-        int16_t muestras16Bits[256];
-        int cantidadDeMuestras = bytesLeidos / 4; //Divido por 4 porque leímos en muestras de 32 bits
-
-        for (int i = 0; i < cantidadDeMuestras; i++) {
-            muestras16Bits[i] = (int16_t)(i2sBuffer[i] >> 14);
+        int cantidadDeMuestras = bytesLeidos / 4; // Total de muestras de 32 bits recibidas (L + R)
+        int muestrasGuardadas = 0;
+    
+        // Avanzamos de a 2 pasos (i += 2) para capturar solo el canal activo
+        // y omitir la muestra de silencio del canal vacío
+        for (int i = 0; i < cantidadDeMuestras; i += 2) {
+            muestras16Bits[muestrasGuardadas] = (int16_t)(i2sBuffer[i] >> 14);
+            muestrasGuardadas++;
         }
 
-        //Multiplico por 2 porque escribimos en bytes pero las muestras que escribimos están en array de 16 bits
-        gestorAlmacenamiento->guardarDato((uint8_t*)muestras16Bits, cantidadDeMuestras * 2);
+        // Multiplicamos muestrasGuardadas por 2 porque cada int16_t ocupa 2 bytes físicos
+        gestorAlmacenamiento->guardarDato((uint8_t*)muestras16Bits, muestrasGuardadas * 2);
     }
 
     void detenerGrabacion() {

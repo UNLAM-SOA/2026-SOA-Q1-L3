@@ -11,7 +11,7 @@ public:
     // Configuración inicial
     void iniciar() {
         lcd.init();
-        lcd.backlight();
+        //lcd.backlight();
     }
 
 
