@@ -10,9 +10,35 @@
 #include "GestorDeRed.h"
 #include "GestorAlmacenamiento.h"
 #include "GestorMicrofono.h"
+#include "gestorMQTT.h"
 
+// ==========================================
+// CONFIGURACIÓN DE RED Y MQTT
+// ==========================================
+
+// Credenciales WiFi (Hotspot del celular)
+const char* WIFI_SSID = "motorola edge 40_5723";
+const char* WIFI_PASS = "SecretoNonofono8";
+
+// Credenciales del Broker (HiveMQ Cloud)
+const char* MQTT_BROKER = "e10a0f3769d14449b0472d6e60e344a9.s1.eu.hivemq.cloud";
+const char* MQTT_USER   = "admin_prueba";
+const char* MQTT_PASS   = "Nonofono8";
+
+// ==========================================
+// INSTANCIAS GLOBALES  
+// ==========================================
+
+// Instanciamos nuestro gestor inyectando las constantes
+GestorMQTT gestorMQTT(
+    WIFI_SSID, 
+    WIFI_PASS, 
+    MQTT_BROKER, 
+    MQTT_USER, 
+    MQTT_PASS
+);
 // MODO DEBUG
-#define SERIAL_ENABLED 1
+#define SERIAL_ENABLED 0
 #if SERIAL_ENABLED
 #define SerialPrint(str) Serial.println(str)
 #else
@@ -187,6 +213,8 @@ void taskEvento(void *pvParameters);
 void taskFSM(void *pvParameters);
 String eventoToString(TipoEvento evento);
 String estadoToString(EstadoFSM estado);
+void enviarMensajeMQTT();
+void procesarMensajeEntrante(char* topic, byte* payload, unsigned int length);
 
 // ==========================================
 // CALLBACKS Y FUNCIONES AUXILIARES
@@ -255,6 +283,12 @@ void setup()
 
     // 2. Inicializamos el hardware del micrófono (Driver I2S)
     gestorAudio.iniciar();
+
+    Serial.println("Iniciando módulos de red...");
+    // Delegamos la conexión inicial al gestor
+    gestorMQTT.configurarReceptor(procesarMensajeEntrante); // <--- Agrega esta línea
+    gestorMQTT.iniciarWiFi();
+    gestorMQTT.conectarBroker();
 
     // 3. Montamos la tarjeta
     if (!gestorSD.iniciarSD())
@@ -431,6 +465,9 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
+                case EV_CONTINUE:
+                    gestorMQTT.mantenerConexion();
+                    break;
                 case EV_BTN_ARRIBA:
                 case EV_BTN_ABAJO:
                     estadoActual = NAVEGANDO;
@@ -442,6 +479,7 @@ void taskFSM(void *pvParameters)
                     estadoActual = EMERGENCIA;
                     xTimerStop(xTimeoutTimer, 0);
                     gestorUI.mostrarEmergencia();
+                    enviarMensajeMQTT();
                     break;
 
                 case EV_BTN_EMERGENCIA_PRESS:
@@ -457,7 +495,7 @@ void taskFSM(void *pvParameters)
                 switch (evento.tipo)
                 {
                 case EV_BTN_ABAJO:
-                    indiceContacto = min(indiceContacto + 1, 9);
+                    indiceContacto = min(indiceContacto + 1, gestorUI.obtenerCantidadEfectiva(listaContactos) - 1);
                     if (indiceActual != indiceContacto)
                         gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
                     indiceActual = indiceContacto;
@@ -864,5 +902,77 @@ String estadoToString(EstadoFSM estado)
         return "MOSTRANDO_ERROR";
     default:
         return "DESCONOCIDO";
+    }
+}
+
+void enviarMensajeMQTT()
+{
+    // 1. Verificamos que no se haya caído el WiFi o la conexión a HiveMQ
+    gestorMQTT.mantenerConexion();
+
+    // 2. Generamos un número aleatorio entre 1000 y 9999 para distinguir el mensaje
+    long idRandom = random(1000, 9999);
+
+    // 3. Armamos la carga útil (Payload) inyectando el identificador
+    String payload = "{\"alerta\": true, \"mensaje\": \"¡Emergencia! El abuelo necesita ayuda.\", \"id_mensaje\": " + String(idRandom) + "}";
+
+    // 4. El Gestor ejecuta la lógica de negocio y envía el mensaje
+    gestorMQTT.publicarAlerta("nonofono/alertas", payload.c_str());
+}
+
+void procesarMensajeEntrante(char* topic, byte* payload, unsigned int length) {
+    // 1. Convertimos los bytes crudos a un String de C++
+    String mensaje = "";
+    for (int i = 0; i < length; i++) {
+        mensaje += (char)payload[i];
+    }
+
+    // 2. Filtramos por el tópico de configuración
+    if (String(topic) == "nonofono/config/contactos") {
+        
+        int indiceInicio = 0;
+        int indicePipe = mensaje.indexOf('|');
+        int idxContacto = 0; // Índice para recorrer tu array global listaContactos
+
+        Serial.println("\n[Config] --- SOBREESCRIBIENDO LISTA GLOBAL DE CONTACTOS ---");
+        
+        // 3. Recorremos la cadena buscando el delimitador '|' y cuidando de no desbordar el array
+        while (indicePipe != -1 && idxContacto < MAX_CONTACTOS) {
+            String contacto = mensaje.substring(indiceInicio, indicePipe);
+            contacto.trim(); 
+
+            if (contacto.length() > 0) {
+                // Pisamos el valor en la posición actual del array global
+                listaContactos[idxContacto] = contacto;
+                Serial.printf("listaContactos[%d] actualizado -> %s\n", idxContacto, listaContactos[idxContacto].c_str());
+                idxContacto++;
+            }
+
+            // Desplazamos los índices para buscar el siguiente elemento
+            indiceInicio = indicePipe + 1;
+            indicePipe = mensaje.indexOf('|', indiceInicio);
+        }
+
+        // 4. Resguardo: Procesamos el último fragmento si el mensaje no terminaba en '|'
+        if (indiceInicio < mensaje.length() && idxContacto < MAX_CONTACTOS) {
+            String ultimoContacto = mensaje.substring(indiceInicio);
+            ultimoContacto.trim();
+            if (ultimoContacto.length() > 0) {
+                listaContactos[idxContacto] = ultimoContacto;
+                Serial.printf("listaContactos[%d] actualizado (final) -> %s\n", idxContacto, listaContactos[idxContacto].c_str());
+                idxContacto++;
+            }
+        }
+
+        // 5. Limpieza residual: Si la nueva lista es más corta que MAX_CONTACTOS,
+        // vaciamos las posiciones restantes para eliminar los datos viejos/fantasmas.
+        int contactosActualizados = idxContacto; 
+        while (idxContacto < MAX_CONTACTOS) {
+            listaContactos[idxContacto] = ""; // Se setea como String vacío
+            idxContacto++;
+        }
+        
+        Serial.printf("[Config] Actualización terminada. Se cargaron %d contactos nuevos.\n", contactosActualizados);
+        Serial.println("-----------------------------------------------------------\n");
     }
 }

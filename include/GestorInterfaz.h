@@ -31,7 +31,17 @@ public:
         lcd.setCursor(0, 2); lcd.print("O ABAJO v PARA");
         lcd.setCursor(0, 3); lcd.print("ENVIAR MENSAJES");
     }
-
+    int obtenerCantidadEfectiva(String contactos[10]) {
+    int cantidad = 0;
+    for (int i = 0; i < 10; i++) {
+        if (contactos[i].length() > 0) {
+            cantidad++;
+        } else {
+            break; // Al primer string vacío, terminamos de contar
+        }
+    }
+    return cantidad;
+}
 
     // Recibe un array de contactos y el índice actual para dibujar el cursor "<-"
 void mostrarNavegandoContactos(String contactos[10], int indiceSeleccionado) {
@@ -39,28 +49,34 @@ void mostrarNavegandoContactos(String contactos[10], int indiceSeleccionado) {
     lcd.setCursor(0, 0); 
     lcd.print("SELECCIONE CONTACTO:");
 
-    // Si el seleccionado es menor a 3, la pantalla arranca desde el índice 0.
-    // Si es 3 o mayor, empujamos la lista para que el seleccionado quede siempre al final.
+    int cantidadEfectiva = obtenerCantidadEfectiva(contactos);
+
+    if (cantidadEfectiva == 0) {
+        lcd.setCursor(0, 1);
+        lcd.print("No hay contactos");
+        return;
+    }
+
+    if (indiceSeleccionado>cantidadEfectiva)
+        indiceSeleccionado=cantidadEfectiva;
     int indiceTop = 0;
     if (indiceSeleccionado >= 3) {
         indiceTop = indiceSeleccionado - 2;
     }
+
     for (int i = 0; i < 3; i++) {
         int indiceActual = indiceTop + i;
         
-        // Evitar desbordamientos de memoria si llegamos al límite del arreglo
-        if (indiceActual < 10) { 
+        if (indiceActual < cantidadEfectiva) { 
             lcd.setCursor(0, i + 1);
             lcd.print(contactos[indiceActual]);
             
-            // Dibujar el cursor si la fila actual coincide con la seleccionada
             if (indiceActual == indiceSeleccionado) {
                 lcd.print(" <-"); 
             }
         }
     }
 }
-
 
     void mostrarConfirmarContacto(String contactoSeleccionado) {
         lcd.clear();
