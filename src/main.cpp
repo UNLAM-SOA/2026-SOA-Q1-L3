@@ -31,9 +31,9 @@
 #define BTN_EMERGENCIA_TIEMPO (SERIAL_ENABLED == 1) ? 2000 : 5000
 #define DELAY_INIT 3000
 #define TIMEOUT_EXITO_FRACASO 4000
-#define BITS_RESOLUCION 12 
-#define TAM_STACK_GET_EVENT 2048
-#define TAM_STACK_FSM 4096
+#define BITS_RESOLUCION 12
+#define TAM_STACK_GET_EVENT 4096
+#define TAM_STACK_FSM 8192
 
 // Timers
 #define BIT_TIMEOUT (1 << 0)
@@ -55,7 +55,7 @@ const int SD_MOSI = 23;
 
 // --- Micrófono INMP441 (I2S) ---
 const int MIC_SCK = 14; // BCLK
-const int MIC_WS = 15;  // LRC / L/R Clock
+const int MIC_WS = 25;  // LRC / L/R Clock
 const int MIC_SD = 32;  // DIN / Data
 
 // --- Actuadores ---
@@ -160,6 +160,20 @@ QueueHandle_t colaEventos;
 TimerHandle_t xTimeoutTimer, xRecordingTimer, xBuzzerTimer;
 TaskHandle_t getEventHandler;
 
+TaskHandle_t xGrabacionTaskHandle = NULL;
+volatile bool grabandoAudio = false;
+void taskGrabacionAudio(void *pvParameters)
+{
+    Serial.println("[Audio] Tarea de grabación iniciada en segundo plano.");
+    while (grabandoAudio) // <-- Ahora depende de la bandera
+    {
+        gestorAudio.registrarMedida();
+    }
+
+    // Cuando la bandera sea falsa, sale del while y llega aquí
+    Serial.println("[Audio] Tarea finalizada limpiamente.");
+    vTaskDelete(NULL); // Se autodestruye de forma segura
+}
 // ==========================================
 // PROTOTIPOS DE FUNCIONES
 // ==========================================
@@ -214,7 +228,7 @@ bool leerBotonUnClic(int pin)
 
 void setup()
 {
-    Serial.begin(115200);
+    Serial.begin(921600);
     Serial.println("Iniciando Sistema de Gerontotecnología...");
 
     pinMode(LED_PIN, OUTPUT);
@@ -236,14 +250,21 @@ void setup()
     // Inicialización del Bus I2C (Pantalla LCD)
     Wire.begin(LCD_SDA, LCD_SCL);
 
+    // 1. Inyectamos la dependencia siempre, exista o no la SD física en este instante
+    gestorAudio.setAlmacenamiento(&gestorSD);
+
+    // 2. Inicializamos el hardware del micrófono (Driver I2S)
+    gestorAudio.iniciar();
+
+    // 3. Montamos la tarjeta
     if (!gestorSD.iniciarSD())
     {
         Serial.println("ERROR: No se detectó Tarjeta SD o falló el montaje.");
+        // Opcional: Podrías cambiar el estadoActual a un estado de error de hardware aquí
     }
     else
     {
         Serial.println("Tarjeta SD montada correctamente.");
-        gestorAudio.setAlmacenamiento(&gestorSD);
     }
 
     Serial.println("Setup completado. Iniciando FSM...");
@@ -295,13 +316,12 @@ void taskEvento(void *pvParameters)
 {
     while (1)
     {
-        #if SERIAL_ENABLED
-            eventoAnterior.tipo = evento.tipo;
-        #endif
+#if SERIAL_ENABLED
+        eventoAnterior.tipo = evento.tipo;
+#endif
         evento.tipo = EV_CONTINUE;
         uint32_t notificaciones = 0;
 
-        
         if (gestorBotonEmergencia.estaMantenido())
         {
             evento.tipo = EV_BTN_EMERGENCIA;
@@ -355,15 +375,14 @@ void taskEvento(void *pvParameters)
             }
         }
 
-        #if SERIAL_ENABLED
-            if (evento.tipo != eventoAnterior.tipo)
-                {
-                    SerialPrint("Evento actual: " + eventoToString(evento.tipo));
-                }
-        #endif
-        //xQueueSend va debajo porque sino genera una race condition y no permite visualizar correctamente el debug
+#if SERIAL_ENABLED
+        if (evento.tipo != eventoAnterior.tipo)
+        {
+            SerialPrint("Evento actual: " + eventoToString(evento.tipo));
+        }
+#endif
+        // xQueueSend va debajo porque sino genera una race condition y no permite visualizar correctamente el debug
         xQueueSend(colaEventos, &evento.tipo, portMAX_DELAY);
-        // Verifica cada 50ms, de este modo reducimos el uso del CPU
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -424,12 +443,11 @@ void taskFSM(void *pvParameters)
                     xTimerStop(xTimeoutTimer, 0);
                     gestorUI.mostrarEmergencia();
                     break;
-                
+
                 case EV_BTN_EMERGENCIA_PRESS:
                     xTimerReset(xTimeoutTimer, 0);
                     break;
                 }
-
             }
             break;
 
@@ -535,6 +553,9 @@ void taskFSM(void *pvParameters)
                     xTimerStop(xBuzzerTimer, 0);
                     xTimerStart(xRecordingTimer, 0);
                     gestorUI.mostrarGrabando(listaContactos[indiceContacto]);
+                    // Gemini
+                    grabandoAudio = true; // Levantamos la bandera
+                    xTaskCreate(taskGrabacionAudio, "GrabandoAudio", 4096, NULL, 3, &xGrabacionTaskHandle);
                     break;
 
                 case EV_BTN_CANCELAR:
@@ -554,27 +575,45 @@ void taskFSM(void *pvParameters)
             {
                 switch (evento.tipo)
                 {
-                case EV_CONTINUE:
-                    // Simulamos la grabación del micrófono
-                    gestorAudio.registrarMedida();
-                    break;
+                    // case EV_CONTINUE:
+                    //     // Simulamos la grabación del micrófono
+                    //     gestorAudio.registrarMedida();
+                    //     break;
 
                 case EV_BTN_GRABAR:
+
+                    grabandoAudio = false;
+                    // 2. Le damos 50 milisegundos de cortesía para que termine de
+                    //    escribir su último bloque en la SD y libere el bus SPI.
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    // 3. Ahora sí, cerramos el archivo. La cabecera se escribirá con éxito.
                     gestorAudio.detenerGrabacion();
                     // gestorRed.iniciarEnvioMensaje();
                     estadoActual = CONFIRMAR_AUDIO;
                     gestorUI.mostrarConfirmarAudio();
                     xTimerStop(xRecordingTimer, 0);
                     xTimerStart(xTimeoutTimer, 0);
+                    gestorSD.depurarArchivo();
                     break;
 
                 case EV_BTN_EMERGENCIA:
+                    grabandoAudio = false;
+                    // 2. Le damos 50 milisegundos de cortesía para que termine de
+                    //    escribir su último bloque en la SD y libere el bus SPI.
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    // 3. Ahora sí, cerramos el archivo. La cabecera se escribirá con éxito.
                     gestorAudio.detenerGrabacion();
                     estadoActual = EMERGENCIA;
                     gestorUI.mostrarEmergencia();
                     xTimerStop(xRecordingTimer, 0);
                     break;
                 case EV_TIMEOUT:
+
+                    grabandoAudio = false;
+                    // 2. Le damos 50 milisegundos de cortesía para que termine de
+                    //    escribir su último bloque en la SD y libere el bus SPI.
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    // 3. Ahora sí, cerramos el archivo. La cabecera se escribirá con éxito.
                     gestorAudio.detenerGrabacion();
                     estadoActual = CONFIRMAR_AUDIO;
                     gestorUI.mostrarConfirmarAudio();
@@ -641,7 +680,21 @@ void taskFSM(void *pvParameters)
                 {
                 case EV_BTN_CONFIRMAR:
                     estadoActual = ESPERANDO_WIFI;
-                    gestorSD.leerArchivo();
+                    
+                    // 1. LE PONEMOS UN BOZAL A LA TAREA DE EVENTOS
+                    // Suspendemos taskEvento para que no despierte ni imprima nada en Serial
+                    if (getEventHandler != NULL) {
+                        vTaskSuspend(getEventHandler);
+                    }
+                    
+                    // 2. Enviamos el archivo con exclusividad absoluta del hardware
+                    gestorSD.enviarArchivoPorSerial();
+                    
+                    // 3. REANUDAMOS la tarea de eventos para que el sistema siga operando
+                    if (getEventHandler != NULL) {
+                        vTaskResume(getEventHandler);
+                    }
+                    
                     xTimerStop(xTimeoutTimer, 0);
                     break;
 
@@ -672,7 +725,7 @@ void taskFSM(void *pvParameters)
             //------------------------------------------
             case ESPERANDO_WIFI:
             {
-                //TODO implementar un timeout para wifi y que se pueda llegar a emergencias si no se resolvio el mensaje
+                // TODO implementar un timeout para wifi y que se pueda llegar a emergencias si no se resolvio el mensaje
                 switch (evento.tipo)
                 {
                 // Funcion mockeada esperando a ser implementada a futuro
