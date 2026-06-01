@@ -42,6 +42,17 @@ public:
     }
     return cantidad;
 }
+void mostrarProcesandoAudio() {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("   PROCESANDO   ");
+    lcd.setCursor(0, 1);
+    lcd.print(" AUDIO, ESPERE. ");
+    
+    // Si tu pantalla es de 20x4, puedes agregar una animación simple o más texto
+    // lcd.setCursor(0, 2);
+    // lcd.print(" Guardando en SD...");
+}
 
     // Recibe un array de contactos y el índice actual para dibujar el cursor "<-"
 void mostrarNavegandoContactos(String contactos[10], int indiceSeleccionado) {
