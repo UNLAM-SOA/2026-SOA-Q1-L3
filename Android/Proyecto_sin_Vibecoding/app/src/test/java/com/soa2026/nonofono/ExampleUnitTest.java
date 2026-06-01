@@ -1,4 +1,4 @@
-package com.example.myapplication;
+package com.soa2026.nonofono;
 
 import org.junit.Test;
 

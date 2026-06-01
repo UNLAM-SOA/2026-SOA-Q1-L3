@@ -10,7 +10,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.App.Starting">
+        android:theme="@style/Theme.Nonofono">
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -19,6 +19,14 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+        <activity
+            android:name=".AgregarContactoActivity"
+            android:exported="false">
+        </activity>
+        <activity
+            android:name=".LocalizarDispositivoActivity"
+            android:exported="false">
         </activity>
     </application>
 

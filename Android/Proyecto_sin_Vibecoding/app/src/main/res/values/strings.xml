@@ -1,8 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">My Application</string>
-    <string name="title_nonofono">Nonofono</string>
-    <string name="button1_text">button1</string>
-    <string name="button2_text">button2</string>
-    <string name="button3_text">button3</string>
-    <string name="button4_text">button4</string>
+    <!-- Menu principal-->
+    <string name="app_name">Nonofono</string>
+    <string name="menu_agregar_contacto">Agregar Contacto</string>
+    <string name="menu_localizar_dispositivo">Buscar Dispositivo</string>
+    <string name="menu_localizar_dispositivo_estado">Estado: Desconectado</string>
+    <string name="menu_descripcion">Celular simplificado para adultos mayores</string>
+
+    <!-- Agregar contacto -->
+
+    <string name="agregar_contacto_nombre">Nombre</string>
+    <string name="agregar_contacto_telefono">Teléfono</string>
+    <string name="agregar_contacto_agregar">Agregar</string>
+    <string name="agregar_contacto_titulo">Agregar Contacto</string>
+
+    <!-- Localizar Dispositivo -->
+    <string name="localizar_dispositivo_descripcion">Agite el teléfono para encontrar su dispositivo.</string>
+
+    <!-- Miscelaneos -->
+    <string name="emoji_telefono">📱</string>
+    <string name="localizar_dispositivo_titulo">Buscar Dispositivo</string>
+
 </resources>
