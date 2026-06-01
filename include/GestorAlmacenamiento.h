@@ -171,7 +171,7 @@ class GestorAlmacenamiento
         }
         Serial.println("\n");
 
-        Serial.println("2. MUESTRAS DE AUDIO (Si son puros '00', el micrófono graba silencio):");
+        Serial.println("2. MUESTRAS DE AUDIO");
         for (int i = 0; i < 64; i++) { 
             if (archivo.available()) {
                 int byteLeido = archivo.read();

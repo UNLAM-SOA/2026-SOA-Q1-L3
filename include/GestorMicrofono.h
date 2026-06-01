@@ -67,7 +67,7 @@ public:
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = TASA_MUESTREO,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  
-        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT, // <-- CAMBIAR A ESTÉREO
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = 8,
@@ -152,8 +152,6 @@ public:
         // TODO Lógica de lectura I2S y escritura en SD
         gestorAlmacenamiento->abrirArchivoWAV(ruta, TASA_MUESTREO, 16, 1);
     }
-
-    //Como no tenemos micrófono, tomamos una medida del potenciómetro que lo simula en cada ciclo de la FSM
     void registrarMedida()
     {
         size_t bytesLeidos;
@@ -165,7 +163,7 @@ public:
         // Avanzamos de a 2 pasos (i += 2) para capturar solo el canal activo
         // y omitir la muestra de silencio del canal vacío
         for (int i = 0; i < cantidadDeMuestras; i += 2) {
-            muestras16Bits[muestrasGuardadas] = (int16_t)(i2sBuffer[i] >> 14);
+            muestras16Bits[muestrasGuardadas] = (int16_t)(i2sBuffer[i] >> 14); 
             muestrasGuardadas++;
         }
 
