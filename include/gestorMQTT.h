@@ -4,6 +4,8 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 
+#define MAX_REINTENTOS 10
+#define TIEMPO_REINTENTO 5000
 class GestorMQTT {
 private:
     const char* ssid;
@@ -15,6 +17,9 @@ private:
 
     WiFiClientSecure clienteSeguro;
     PubSubClient clienteMQTT;
+
+    TickType_t ultimoIntentoMQTT = 0;
+    const TickType_t INTERVALO_REINTENTO = pdMS_TO_TICKS(TIEMPO_REINTENTO); 
 
 public:
     // El constructor inyecta el cliente seguro dentro del cliente MQTT
@@ -29,21 +34,28 @@ public:
     }
 
     void iniciarWiFi() {
+        int cont=0;
         Serial.print("\n[Red] Conectando a WiFi: ");
         Serial.println(ssid);
         WiFi.begin(ssid, wifi_pass);
 
-        while (WiFi.status() != WL_CONNECTED) {
-            delay(500);
+        while (WiFi.status() != WL_CONNECTED && cont < MAX_REINTENTOS) {
+            // Usamos vTaskDelay sin miedo, el setup() corre en una tarea
+            vTaskDelay(pdMS_TO_TICKS(500));
             Serial.print(".");
+            cont++;
         }
-        Serial.println("\n[Red] WiFi conectado con éxito.");
-
-        // TRUCO VITAL: Omitimos la validación del certificado raíz del servidor
-        // para no agotar la RAM del ESP32 guardando certificados largos.
-        clienteSeguro.setInsecure(); 
-        
+        if(cont< MAX_REINTENTOS)
+        {
+            Serial.println("\n[Red] WiFi conectado con éxito.");
+        // Omitimos la validación del certificado raíz del servidor
+        clienteSeguro.setInsecure();        
         clienteMQTT.setServer(mqtt_broker, mqtt_puerto);
+        }
+        else
+        {
+            Serial.println("\n[Red] Hubo un error en la conexión al WiFi");
+        }
     }
 
     bool conectarBroker() {
@@ -55,7 +67,7 @@ public:
         if (clienteMQTT.connect(clientId.c_str(), mqtt_usuario, mqtt_clave)) {
             Serial.println(" ¡Conexión TLS establecida!");
             
-            // 2. Nos suscribimos al canal de configuración apenas conecta
+            //Nos suscribimos al canal de configuración apenas conecta
             clienteMQTT.subscribe("nonofono/config/contactos");
             Serial.println("[MQTT] Suscrito a nonofono/config/contactos");
             
@@ -69,12 +81,25 @@ public:
     }
 
     // Debe llamarse continuamente en un loop/tarea para mantener vivo el ping con el servidor
+    // Usamos el tipo de dato nativo del RTOS
     void mantenerConexion() {
         if (WiFi.status() == WL_CONNECTED) {
             if (!clienteMQTT.connected()) {
-                conectarBroker();
+                
+                TickType_t tiempoActual = xTaskGetTickCount();
+                
+                // Lo hace cada 5 segundos porque conectarse al broker es una acción costosa
+                //y para que en caso de error le damos un respiro a la topología para que
+                //conecte correctamente
+                if (tiempoActual - ultimoIntentoMQTT >= INTERVALO_REINTENTO) {
+                    ultimoIntentoMQTT = tiempoActual; 
+                    
+                    Serial.println("[MQTT] Intentando reconexión asíncrona...");
+                    conectarBroker(); 
+                }
+            } else {
+                clienteMQTT.loop();
             }
-            clienteMQTT.loop();
         }
     }
 
