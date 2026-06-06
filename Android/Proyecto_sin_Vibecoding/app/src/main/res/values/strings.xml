@@ -20,5 +20,7 @@
     <!-- Miscelaneos -->
     <string name="emoji_telefono">📱</string>
     <string name="localizar_dispositivo_titulo">Buscar Dispositivo</string>
+    <string name="columna_nombre_tabla">Nombre</string>
+    <string name="nro_telef_tabla">Nro telefónico</string>
 
 </resources>
