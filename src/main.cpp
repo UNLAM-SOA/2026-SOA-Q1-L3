@@ -10,8 +10,8 @@
 #include "GestorDeRed.h"
 #include "GestorInterfaz.h"
 #include "GestorMicrofono.h"
-#include "gestorMQTT.h"
-
+#include "GestorMQTT.h"
+#include "GestorHTTP.h"
 // ==========================================
 // CONFIGURACIÓN DE RED Y MQTT
 // ==========================================
@@ -36,6 +36,7 @@ const char *MQTT_PASS = "Nonofono8";
 // Si ACTIVAR_RED existe, este código se compila
 
 GestorMQTT gestorMQTT(WIFI_SSID, WIFI_PASS, MQTT_BROKER, MQTT_USER, MQTT_PASS);
+GestorHTTP gestorHTTP(80, "/archivoAudio.wav");
 #endif
 
 // MODO DEBUG
@@ -205,6 +206,7 @@ void taskRed(void *pvParameters) {
         #ifdef ACTIVAR_RED
             // Mantiene el Keep-Alive y procesa los mensajes entrantes de configuración
             gestorMQTT.mantenerConexion();
+            gestorHTTP.atenderClientes();
         #endif
 
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -446,6 +448,7 @@ void taskFSM(void *pvParameters) {
           #ifdef ACTIVAR_RED
             gestorMQTT.iniciarWiFi();
             gestorMQTT.conectarBroker();
+            gestorHTTP.iniciar();
             xTaskCreate(taskRed,"TareaRedMQTT",TAM_STACK_RED,NULL, 1,&xTaskRedHandle);
           #endif
 

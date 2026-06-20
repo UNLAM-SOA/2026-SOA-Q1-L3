@@ -49,8 +49,10 @@ public:
         {
             Serial.println("\n[Red] WiFi conectado con éxito.");
         // Omitimos la validación del certificado raíz del servidor
-        clienteSeguro.setInsecure();        
-        clienteMQTT.setServer(mqtt_broker, mqtt_puerto);
+            Serial.print("[Red] Dirección IP del ESP32: ");
+            Serial.println(WiFi.localIP());
+            clienteSeguro.setInsecure();        
+            clienteMQTT.setServer(mqtt_broker, mqtt_puerto);
         }
         else
         {
