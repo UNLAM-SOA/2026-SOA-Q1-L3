@@ -1,157 +1,8 @@
+#include "Config.h"
 #include <Arduino.h>
-#include <Wire.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
-#include <freertos/task.h>
 
 
-#include "GestorAlmacenamiento.h"
-#include "GestorBoton.h"
-#include "GestorDeRed.h"
-#include "GestorInterfaz.h"
-#include "GestorMicrofono.h"
-#include "GestorMQTT.h"
-#include "GestorHTTP.h"
-// ==========================================
-// CONFIGURACIÓN DE RED Y MQTT
-// ==========================================
-// Credenciales WiFi (Hotspot del celular)
-const char *WIFI_SSID = "motorola edge 40_5723";
-const char *WIFI_PASS = "SecretoNonofono8";
 
-// Credenciales del Broker (HiveMQ Cloud)
-const char *MQTT_BROKER = "e10a0f3769d14449b0472d6e60e344a9.s1.eu.hivemq.cloud";
-const char *MQTT_USER = "admin_prueba";
-const char *MQTT_PASS = "Nonofono8";
-
-// ==========================================
-// INSTANCIAS GLOBALES
-// ==========================================
-
-// Instanciamos nuestro gestor inyectando las constantes
-
-#define ACTIVAR_RED
-//Principalmente metemos este define para poder usar el simulador desactivando todas las funciones de mqtt
-#ifdef ACTIVAR_RED
-// Si ACTIVAR_RED existe, este código se compila
-
-GestorMQTT gestorMQTT(WIFI_SSID, WIFI_PASS, MQTT_BROKER, MQTT_USER, MQTT_PASS);
-GestorHTTP gestorHTTP(80, "/archivoAudio.wav");
-#endif
-
-// MODO DEBUG
-#define SERIAL_ENABLED 1
-#if SERIAL_ENABLED
-  #define SerialPrint(str) Serial.println(str)
-#else
-  #define SerialPrint(str)
-#endif
-
-#define MAX_EVENTOS 40
-#define MAX_CONTACTOS 10
-#define MAX_MENSAJES 3
-#define CANT_PINES 40
-
-// --- Variables de Control de Tiempo (Timeouts) ---
-#define TIMEOUT_GENERAL (SERIAL_ENABLED == 1) ? 4000 : 30000 // 30 segundos
-#define TIMEOUT_GRABACION                                                      \
-  (SERIAL_ENABLED == 1) ? 6000 : 60000 // 60 segundos por mensaje
-#define TIMEOUT_BUZZER 1000
-#define BTN_EMERGENCIA_TIEMPO (SERIAL_ENABLED == 1) ? 2000 : 5000
-#define DELAY_INIT 3000
-#define TIMEOUT_EXITO_FRACASO 4000
-#define BITS_RESOLUCION 12
-#define TAM_STACK_GET_EVENT 4096
-#define TAM_STACK_FSM 8192
-#define TAM_STACK_SD 4096
-#define TAM_STACK_RED 8192
-
-
-// Timers
-#define BIT_TIMEOUT (1 << 0)
-#define BIT_BUZZER_FIN (1 << 1)
-
-// ==========================================
-// DEFINICIÓN DE PINES (ESP32 30-Pines)
-// ==========================================
-
-// --- Pantalla LCRD (I2C) ---
-const int LCD_SDA = 21;
-const int LCD_SCL = 22;
-
-// --- Tarjeta SD (SPI) ---
-const int SD_CS = 5;
-const int SD_SCK = 18;
-const int SD_MISO = 19;
-const int SD_MOSI = 23;
-
-// --- Micrófono INMP441 (I2S) ---
-const int MIC_SCK = 14; // BCLK
-const int MIC_WS = 25;  // LRC / L/R Clock
-const int MIC_SD = 32;  // DIN / Data
-
-// --- Actuadores ---
-const int BUZZER_PIN = 26;
-const int LED_PIN = 27;
-const int FREC_BUZZER = 2000;
-
-// --- Sensor Analógico ---
-const int POT_PIN = 33; // Potenciómetro (ADC1)
-
-// --- Pulsadores ---
-// Los pines 34, 35, 36 y 39 requieren resistencia física externa.
-const int BTN_ARRIBA = 36;
-const int BTN_ABAJO = 39;
-const int BTN_CONFIRMAR = 34;
-const int BTN_CANCELAR = 35;
-
-// Estos pines sí tienen resistencia Pull-up interna en el ESP32.
-const int BTN_GRABAR = 4;
-const int BTN_EMERGENCIA = 13;
-
-// ==========================================
-// DEFINICIÓN DE LA MÁQUINA DE ESTADOS
-// ==========================================
-
-//----------------------------------------------
-// EVENTOS
-//----------------------------------------------
-enum TipoEvento {
-  EV_CONTINUE,
-  EV_BTN_ARRIBA,
-  EV_BTN_ABAJO,
-  EV_BTN_CONFIRMAR,
-  EV_BTN_CANCELAR,
-  EV_BTN_GRABAR,
-  EV_BUZZER_FIN,
-  EV_BTN_EMERGENCIA,
-  EV_BTN_EMERGENCIA_PRESS,
-  EV_TIMEOUT,
-  EV_WIFI_EXITO,
-  EV_WIFI_ERROR
-};
-
-struct Evento {
-  TipoEvento tipo;
-};
-
-//----------------------------------------------
-// ESTADOS
-//----------------------------------------------
-enum EstadoFSM {
-  INIT,
-  IDLE,
-  NAVEGANDO,
-  CONFIRMAR_CONTACTO,
-  GRABANDO,
-  INICIANDO_GRABACION,
-  CONFIRMAR_AUDIO,
-  MENSAJE_PREDEFINIDO,
-  EMERGENCIA,
-  ESPERANDO_WIFI,
-  MOSTRANDO_EXITO,
-  MOSTRANDO_ERROR
-};
 
 // ==========================================
 // VARIABLES GLOBALES Y MOCKUPS
@@ -164,16 +15,24 @@ EstadoFSM estadoAnterior = INIT;
 
 // --- Variables de Datos (Mockups) ---
 // Esto va a llegar desde android, por ahora se hardcodea
-String listaContactos[MAX_CONTACTOS] = {
-    "Hijo - Lucas", "Dra. Garcia",   "Emergencias",  "Vecino Juan",
-    "Farmacia",     "Hija - Maria",  "Sobrino Alex", "Cuidado 24hs",
-    "Bomberos",     "Taxi Confianza"};
+Contacto listaContactos[MAX_CONTACTOS] = {
+    {"Hijo - Lucas", "+54 9 11 1234 5678"},
+    {"Dra. Garcia", "+54 9 11 2345 6789"},
+    {"Emergencias", "+54 9 11 0000 0000"},
+    {"Vecino Juan", "+54 9 11 3456 7890"},
+    {"Farmacia", "+54 9 11 4567 8901"},
+    {"Hija - Maria", "+54 9 11 5678 9012"},
+    {"Sobrino Alex", "+54 9 11 6789 0123"},
+    {"Cuidado 24hs", "+54 9 11 7890 1234"},
+    {"Bomberos", "+54 9 11 9111 9111"},
+    {"Taxi Confianza", "+54 9 11 9123 4567"}};
 String listaMensajes[MAX_MENSAJES] = {"Llamame", "Todo bien", "Ven a casa"};
 
 int indiceContacto = 0;
 int indiceActual = 0;
 int indiceMensajeActual = 0;
 int indiceMensaje = 0;
+
 
 // ==========================================
 // INSTANCIACIÓN DE GESTORES
@@ -189,6 +48,11 @@ GestorDeMicrofono gestorAudio(BUZZER_PIN, LED_PIN, POT_PIN, FREC_BUZZER,
 QueueHandle_t colaEventos;
 TimerHandle_t xTimeoutTimer, xRecordingTimer, xBuzzerTimer;
 TaskHandle_t getEventHandler;
+
+  #ifdef ACTIVAR_RED
+GestorMQTT gestorMQTT(WIFI_SSID, WIFI_PASS, MQTT_BROKER, MQTT_USER, MQTT_PASS, colaEventos); // <-- Pasamos la cola al constructor
+GestorHTTP gestorHTTP(80, "/archivoAudio.wav");
+#endif
 
 TaskHandle_t xGrabacionTaskHandle = NULL;
 TaskHandle_t xProcesarSDHandle = NULL;
@@ -227,7 +91,6 @@ void taskProcesarSD(void *pvParameters) {
           gestorSD.depurarArchivo();  
         #endif
         Serial.println("[Fondo] Procesamiento SD terminado.");
-        vTaskDelay(pdMS_TO_TICKS(3000));
         audioListoParaEnviar = true;
     }
 }
@@ -255,9 +118,9 @@ void setup();
 void loop();
 void taskEvento(void *pvParameters);
 void taskFSM(void *pvParameters);
-String eventoToString(TipoEvento evento);
-String estadoToString(EstadoFSM estado);
-void enviarMensajeMQTT();
+
+
+
 void procesarMensajeEntrante(char *topic, byte *payload, unsigned int length);
 
 // ==========================================
@@ -331,7 +194,7 @@ void setup() {
 
   #ifdef ACTIVAR_RED
   Serial.println("Iniciando módulos de red...");
-  gestorMQTT.configurarReceptor(procesarMensajeEntrante);
+  gestorMQTT.configurarReceptor(callbackMQTT);
   #else
   Serial.println("[MODO SIMULADOR] Módulos de red DESACTIVADOS.");
   #endif
@@ -347,6 +210,7 @@ void setup() {
     
     Serial.println("Tareas creadas");
   }
+
 
   // Inicializacion de timers
   xTimeoutTimer = xTimerCreate("TimeoutTimer", pdMS_TO_TICKS(TIMEOUT_GENERAL),
@@ -427,6 +291,7 @@ void taskFSM(void *pvParameters) {
   TipoEvento eventoRecibido;
   while (1) {
     if (xQueueReceive(colaEventos, &eventoRecibido, portMAX_DELAY) == pdPASS) {
+      /*Llegan eventos a esta cola de dos maneras: la FSM o desde las tareas de red*/      
       evento.tipo = eventoRecibido;
       estadoAnterior = estadoActual;
 
@@ -441,9 +306,11 @@ void taskFSM(void *pvParameters) {
 
       //------------------------------------------
       case INIT: {
+        //TODO agregar que pida los contactos en el celular en este estado
         switch (evento.tipo) {
         case EV_CONTINUE:
           gestorUI.mostrarPantallaInit();
+          gestorSD.limpiarArchivosResiduales();
           TickType_t xUltimoTiempoDespertar = xTaskGetTickCount();
           #ifdef ACTIVAR_RED
             gestorMQTT.iniciarWiFi();
@@ -464,6 +331,7 @@ void taskFSM(void *pvParameters) {
       case IDLE: {
         switch (evento.tipo) {
         case EV_CONTINUE:
+
           break;
         case EV_BTN_ARRIBA:
         case EV_BTN_ABAJO:
@@ -471,14 +339,26 @@ void taskFSM(void *pvParameters) {
           xTimerStart(xTimeoutTimer, 0);
           gestorUI.mostrarNavegandoContactos(listaContactos, indiceContacto);
           break;
-
+        case EV_ENCONTRAR_DISPOSITIVO:
+          gestorAudio.encenderBuzzer();
+          delay(DELAY_ENCONTRAR_DISPOSITIVO);
+          gestorAudio.apagarBuzzer();
+          break;
+        case EV_RECIBIR_CONTACTOS_1:
+          // Aquí puedes manejar la recepción de contactos desde la red
+          Serial.println("Evento: EV_RECIBIR_CONTACTOS_1 recibido.");
+          break;
+        case EV_RECIBIR_CONTACTOS_2:
+          // Aquí puedes manejar la recepción de contactos desde la red
+          Serial.println("Evento: EV_RECIBIR_CONTACTOS_2 recibido.");
+          break;
         case EV_BTN_EMERGENCIA:
           estadoActual = EMERGENCIA;
           xTimerStop(xTimeoutTimer, 0);
           gestorUI.mostrarEmergencia();
 
           #ifdef ACTIVAR_RED
-            enviarMensajeMQTT();
+            gestorMQTT.notificarEmergencia();
           #endif
           break;
 
@@ -520,7 +400,7 @@ void taskFSM(void *pvParameters) {
           xTimerStop(xTimeoutTimer, 0);
           gestorUI.mostrarEmergencia();
           #ifdef ACTIVAR_RED
-            enviarMensajeMQTT();
+            gestorMQTT.notificarEmergencia();
           #endif
           break;
         case EV_BTN_EMERGENCIA_PRESS:
@@ -567,7 +447,7 @@ void taskFSM(void *pvParameters) {
           xTimerStop(xTimeoutTimer, 0);
           gestorUI.mostrarEmergencia();
           #ifdef ACTIVAR_RED
-            enviarMensajeMQTT();
+            gestorMQTT.notificarEmergencia();
           #endif
           break;
 
@@ -639,7 +519,7 @@ void taskFSM(void *pvParameters) {
           gestorUI.mostrarEmergencia();
           xTimerStop(xRecordingTimer, 0);
           #ifdef ACTIVAR_RED
-            enviarMensajeMQTT();
+            gestorMQTT.notificarEmergencia();
           #endif
           break;
         }
@@ -666,7 +546,11 @@ void taskFSM(void *pvParameters) {
           break;
 
         case EV_BTN_CONFIRMAR:
+          #ifdef ACTIVAR_RED
+            gestorMQTT.notificarMensajePredeterminado(listaContactos[indiceContacto].telefono, listaMensajes[indiceMensaje]);
+          #endif
           estadoActual = ESPERANDO_WIFI;
+          gestorUI.mostrarEnviando();
           xTimerStop(xTimeoutTimer, 0);
           break;
 
@@ -681,7 +565,7 @@ void taskFSM(void *pvParameters) {
           xTimerStop(xTimeoutTimer, 0);
           gestorUI.mostrarEmergencia();
           #ifdef ACTIVAR_RED
-            enviarMensajeMQTT();
+            gestorMQTT.notificarEmergencia();
           #endif
           break;
         case EV_BTN_EMERGENCIA_PRESS:
@@ -700,14 +584,17 @@ void taskFSM(void *pvParameters) {
       case CONFIRMAR_AUDIO: {
         switch (evento.tipo) {
         case EV_BTN_CONFIRMAR:
-          if(audioListoParaEnviar)
-          {
+          if (audioListoParaEnviar) {
+            #ifdef ACTIVAR_RED
+              gestorMQTT.notificarAudio(listaContactos[indiceContacto].telefono, "/descargar_audio", gestorSD.obtenerPesoAudioFinal());
+            #endif
             estadoActual = ESPERANDO_WIFI;
-          //gestorSD.enviarArchivoPorSerial();
-          xTimerStop(xTimeoutTimer, 0);
-          
+            gestorUI.mostrarEnviando();
+            //gestorSD.enviarArchivoPorSerial();
+            xTimerStop(xTimeoutTimer, 0);
+          } else {
+            gestorUI.mostrarProcesandoAudio();
           }
-          else gestorUI.mostrarProcesandoAudio();
           break;
 
 
@@ -724,7 +611,7 @@ void taskFSM(void *pvParameters) {
           xTimerStop(xTimeoutTimer, 0);
           gestorUI.mostrarEmergencia();
           #ifdef ACTIVAR_RED
-            enviarMensajeMQTT();
+            gestorMQTT.notificarEmergencia();
           #endif
           break;
         case EV_BTN_EMERGENCIA_PRESS:
@@ -732,6 +619,7 @@ void taskFSM(void *pvParameters) {
           break;
         case EV_TIMEOUT:
           estadoActual = ESPERANDO_WIFI;
+          gestorUI.mostrarEnviando();
           xTimerStop(xTimeoutTimer, 0);
           break;
         }
@@ -744,11 +632,12 @@ void taskFSM(void *pvParameters) {
         switch (evento.tipo) {
         // Funcion mockeada esperando a ser implementada a futuro
         case EV_CONTINUE:
+          break;
         case EV_WIFI_EXITO:
           estadoActual = MOSTRANDO_EXITO;
           gestorUI.mostrarExito();
           vTaskDelay(TIMEOUT_EXITO_FRACASO);
-          gestorSD.eliminarArchivo();
+          gestorSD.limpiarEstado(true);
           xTimerStart(xTimeoutTimer, 0);
           break;
 
@@ -756,7 +645,7 @@ void taskFSM(void *pvParameters) {
           estadoActual = MOSTRANDO_ERROR;
           gestorUI.mostrarError();
           vTaskDelay(TIMEOUT_EXITO_FRACASO);
-          gestorSD.eliminarArchivo();
+          gestorSD.limpiarEstado(true);
           xTimerStart(xTimeoutTimer, 0);
           break;
         }
@@ -801,85 +690,6 @@ void taskFSM(void *pvParameters) {
   }
 }
 
-// ==========================================
-// FUNCIONES DE DEPURACIÓN (TO-STRING)
-// ==========================================
-
-String eventoToString(TipoEvento evento) {
-  switch (evento) {
-  case EV_CONTINUE:
-    return "EV_CONTINUE";
-  case EV_BTN_ARRIBA:
-    return "EV_BTN_ARRIBA";
-  case EV_BTN_ABAJO:
-    return "EV_BTN_ABAJO";
-  case EV_BTN_CONFIRMAR:
-    return "EV_BTN_CONFIRMAR";
-  case EV_BTN_CANCELAR:
-    return "EV_BTN_CANCELAR";
-  case EV_BTN_GRABAR:
-    return "EV_BTN_GRABAR";
-  case EV_BUZZER_FIN:
-    return "EV_BUZZER_FIN";
-  case EV_BTN_EMERGENCIA:
-    return "EV_BTN_EMERGENCIA";
-  case EV_BTN_EMERGENCIA_PRESS:
-    return "EV_BTN_EMERGENCIA_PRESS";
-  case EV_TIMEOUT:
-    return "EV_TIMEOUT";
-  case EV_WIFI_EXITO:
-    return "EV_WIFI_EXITO";
-  case EV_WIFI_ERROR:
-    return "EV_WIFI_ERROR";
-  default:
-    return "EV_DESCONOCIDO";
-  }
-}
-
-String estadoToString(EstadoFSM estado) {
-  switch (estado) {
-  case INIT:
-    return "INIT";
-  case IDLE:
-    return "IDLE";
-  case NAVEGANDO:
-    return "NAVEGANDO";
-  case CONFIRMAR_CONTACTO:
-    return "CONFIRMAR_CONTACTO";
-  case CONFIRMAR_AUDIO:
-    return "CONFIRMAR_AUDIO";
-  case GRABANDO:
-    return "GRABANDO";
-  case INICIANDO_GRABACION:
-    return "INICIANDO_GRABACION";
-  case MENSAJE_PREDEFINIDO:
-    return "MENSAJE_PREDEFINIDO";
-  case EMERGENCIA:
-    return "EMERGENCIA";
-  case ESPERANDO_WIFI:
-    return "ESPERANDO_WIFI";
-  case MOSTRANDO_EXITO:
-    return "MOSTRANDO_EXITO";
-  case MOSTRANDO_ERROR:
-    return "MOSTRANDO_ERROR";
-  default:
-    return "DESCONOCIDO";
-  }
-}
-#ifdef ACTIVAR_RED
-
-void enviarMensajeMQTT() {
-  long idRandom = random(1000, 9999);
-
-  // 3. Armamos la carga útil (Payload) inyectando el identificador
-  String payload = "{\"alerta\": true, \"mensaje\": \"¡Emergencia! El abuelo "
-                   "necesita ayuda.\", \"id_mensaje\": " +
-                   String(idRandom) + "}";
-
-  // 4. El Gestor ejecuta la lógica de negocio y envía el mensaje
-  gestorMQTT.publicarAlerta("nonofono/alertas", payload.c_str());
-}
-#endif
 
 void procesarMensajeEntrante(char *topic, byte *payload, unsigned int length) {
   if (estadoActual != IDLE) {
@@ -909,14 +719,23 @@ void procesarMensajeEntrante(char *topic, byte *payload, unsigned int length) {
       contacto.trim();
 
       if (contacto.length() > 0) {
-        // Pisamos el valor en la posición actual del array global
-        listaContactos[idxContacto] = contacto;
-        Serial.printf("listaContactos[%d] actualizado -> %s\n", idxContacto,
-                      listaContactos[idxContacto].c_str());
+        // Si viene con nombre y teléfono separados por ';', los guardamos separados.
+        int sep = contacto.indexOf(';');
+        if (sep >= 0) {
+          String nombre = contacto.substring(0, sep);
+          String telefono = contacto.substring(sep + 1);
+          nombre.trim();
+          telefono.trim();
+          listaContactos[idxContacto] = {nombre, telefono};
+        } else {
+          listaContactos[idxContacto] = {contacto, String("")};
+        }
+        Serial.printf("listaContactos[%d] actualizado -> %s | %s\n", idxContacto,
+                      listaContactos[idxContacto].nombre.c_str(),
+                      listaContactos[idxContacto].telefono.c_str());
         idxContacto++;
       }
 
-      // Desplazamos los índices para buscar el siguiente elemento
       indiceInicio = indicePipe + 1;
       indicePipe = mensaje.indexOf('|', indiceInicio);
     }
@@ -927,9 +746,19 @@ void procesarMensajeEntrante(char *topic, byte *payload, unsigned int length) {
       String ultimoContacto = mensaje.substring(indiceInicio);
       ultimoContacto.trim();
       if (ultimoContacto.length() > 0) {
-        listaContactos[idxContacto] = ultimoContacto;
-        Serial.printf("listaContactos[%d] actualizado (final) -> %s\n",
-                      idxContacto, listaContactos[idxContacto].c_str());
+        int sep = ultimoContacto.indexOf(';');
+        if (sep >= 0) {
+          String nombre = ultimoContacto.substring(0, sep);
+          String telefono = ultimoContacto.substring(sep + 1);
+          nombre.trim();
+          telefono.trim();
+          listaContactos[idxContacto] = {nombre, telefono};
+        } else {
+          listaContactos[idxContacto] = {ultimoContacto, String("")};
+        }
+        Serial.printf("listaContactos[%d] actualizado (final) -> %s | %s\n",
+                      idxContacto, listaContactos[idxContacto].nombre.c_str(),
+                      listaContactos[idxContacto].telefono.c_str());
         idxContacto++;
       }
     }
@@ -939,7 +768,7 @@ void procesarMensajeEntrante(char *topic, byte *payload, unsigned int length) {
     // viejos/fantasmas.
     int contactosActualizados = idxContacto;
     while (idxContacto < MAX_CONTACTOS) {
-      listaContactos[idxContacto] = ""; // Se setea como String vacío
+      listaContactos[idxContacto] = {String(""), String("")};
       idxContacto++;
     }
 

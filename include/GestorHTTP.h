@@ -20,21 +20,23 @@ private:
             servidor.send(200, "text/plain", "El ESP32 esta vivo y escuchando HTTP.");
         });
 
-        // Endpoint para la transferencia del archivo físico desde la SD
+        // Manejador del Preflight CORS (Petición OPTIONS)
+        servidor.on("/descargar_audio", HTTP_OPTIONS, [this]() {
+            servidor.sendHeader("Access-Control-Allow-Origin", "*");
+            servidor.sendHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+            servidor.sendHeader("Access-Control-Allow-Headers", "ngrok-skip-browser-warning");
+            servidor.send(204); // 204 = No Content (Respuesta exitosa vacía)
+        });
+
+        // Tu endpoint original queda igual
         servidor.on("/descargar_audio", HTTP_GET, [this]() {
-            
-            // Abrimos el archivo utilizando el objeto global SD
             File archivoAudio = SD.open(rutaArchivoAudio, FILE_READ);
             if (!archivoAudio) {
                 servidor.send(404, "text/plain", "Error: Archivo WAV no encontrado en la SD.");
                 return;
             }
-            //Permite que cualquier IP pueda descargar el audio, para mas info busca CORS
             servidor.sendHeader("Access-Control-Allow-Origin", "*");
-
-            // streamFile transmite el archivo en bloques optimizados para el heap del ESP32
             servidor.streamFile(archivoAudio, "audio/wav");
-            
             archivoAudio.close();
         });
     }

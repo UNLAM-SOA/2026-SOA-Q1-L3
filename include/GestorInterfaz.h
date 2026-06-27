@@ -1,6 +1,12 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+
+struct Contacto {
+  String nombre;
+  String telefono;
+};
+
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
 // ==========================================
@@ -31,13 +37,13 @@ public:
         lcd.setCursor(0, 2); lcd.print("O ABAJO v PARA");
         lcd.setCursor(0, 3); lcd.print("ENVIAR MENSAJES");
     }
-    int obtenerCantidadEfectiva(String contactos[10]) {
+    int obtenerCantidadEfectiva(Contacto contactos[10]) {
     int cantidad = 0;
     for (int i = 0; i < 10; i++) {
-        if (contactos[i].length() > 0) {
+        if (contactos[i].nombre.length() > 0) {
             cantidad++;
         } else {
-            break; // Al primer string vacío, terminamos de contar
+            break; // Al primer contacto vacío, terminamos de contar
         }
     }
     return cantidad;
@@ -55,7 +61,7 @@ void mostrarProcesandoAudio() {
 }
 
     // Recibe un array de contactos y el índice actual para dibujar el cursor "<-"
-void mostrarNavegandoContactos(String contactos[10], int indiceSeleccionado) {
+void mostrarNavegandoContactos(Contacto contactos[10], int indiceSeleccionado) {
     lcd.clear();
     lcd.setCursor(0, 0); 
     lcd.print("SELECCIONE CONTACTO:");
@@ -80,7 +86,7 @@ void mostrarNavegandoContactos(String contactos[10], int indiceSeleccionado) {
         
         if (indiceActual < cantidadEfectiva) { 
             lcd.setCursor(0, i + 1);
-            lcd.print(contactos[indiceActual]);
+            lcd.print(contactos[indiceActual].nombre);
             
             if (indiceActual == indiceSeleccionado) {
                 lcd.print(" <-"); 
@@ -89,18 +95,20 @@ void mostrarNavegandoContactos(String contactos[10], int indiceSeleccionado) {
     }
 }
 
-    void mostrarConfirmarContacto(String contactoSeleccionado) {
+    void mostrarConfirmarContacto(Contacto contactoSeleccionado) {
         lcd.clear();
         lcd.setCursor(0, 1); lcd.print("CONTACTO ELEGIDO:");
-        lcd.setCursor(0, 2); lcd.print(contactoSeleccionado);
+        lcd.setCursor(0, 2); lcd.print(contactoSeleccionado.nombre);
+        lcd.setCursor(0, 3); lcd.print(contactoSeleccionado.telefono);
     }
 
 
-    void mostrarGrabando(String contactoSeleccionado) {
+    void mostrarGrabando(Contacto contactoSeleccionado) {
         lcd.clear();
         lcd.setCursor(0, 0); lcd.print("* GRABANDO... *");
         lcd.setCursor(0, 1); lcd.print("PARA:");
-        lcd.setCursor(0, 2); lcd.print(contactoSeleccionado);
+        lcd.setCursor(0, 2); lcd.print(contactoSeleccionado.nombre);
+        lcd.setCursor(0, 3); lcd.print(contactoSeleccionado.telefono);
     }
 
 
@@ -113,12 +121,12 @@ void mostrarNavegandoContactos(String contactos[10], int indiceSeleccionado) {
         lcd.setCursor(0, 3); lcd.print("   CANCELAR");
     }
 
-void mostrarMensajesPredefinidos(String contacto, String mensajes[3], int indiceSeleccionado) {
+void mostrarMensajesPredefinidos(Contacto contacto, String mensajes[3], int indiceSeleccionado) {
     lcd.clear();
     
     lcd.setCursor(0, 0); 
     lcd.print("ENVIAR A ");
-    lcd.print(contacto);
+    lcd.print(contacto.nombre);
     lcd.print(":");
     
     //Aseguramos que el índice nunca se salga del rango 0-2

@@ -15,6 +15,7 @@ class GestorAlmacenamiento
     String ruta;
     //Archivo de audio
     int tasaMuestreo, bitsPorMuestra, canales;
+    unsigned long ultimoTamAudio = 0;
 
     public:
     GestorAlmacenamiento(int SD_CS, int SD_SCK, int SD_MISO, int SD_MOSI)
@@ -34,15 +35,37 @@ class GestorAlmacenamiento
 
     void abrirArchivoWAV(const String archivo, int tasaMuestreo, int bitsPorMuestra, int canales)
     {
+        if (archivoAbierto) {
+            Serial.println("[SD] Aviso: cerrando archivo WAV anterior antes de crear uno nuevo.");
+            archivoAbierto.close();
+            ruta = "";
+            ultimoTamAudio = 0;
+        }
+
         // 1. Destruimos cualquier grabación fantasma anterior para no concatenar audios
         if (SD.exists(archivo)) {
-            SD.remove(archivo);
+            if (!SD.remove(archivo)) {
+                Serial.println("[SD] Aviso: no se pudo eliminar el archivo anterior antes de crear WAV.");
+            }
         }
 
         // 2. Ahora sí, creamos el archivo nuevo
         archivoAbierto = SD.open(archivo, FILE_WRITE);
-        ruta = archivo;
+        if (!archivoAbierto) {
+            Serial.println("[SD] Error: no se pudo crear/abrir el archivo WAV en la SD.");
+            Serial.print("[SD] Ruta intentada: ");
+            Serial.println(archivo);
+            if (!SD.begin(pinCS)) {
+                Serial.println("[SD] Error: la tarjeta SD no está montada al abrir WAV.");
+            }
+            if (SD.exists(archivo)) {
+                Serial.println("[SD] El archivo anterior sigue existiendo tras el intento de apertura.");
+            }
+            ruta = "";
+            return;
+        }
 
+        ruta = archivo;
         byte header[TAM_CABECERA_WAV] = {0};
         this->tasaMuestreo = tasaMuestreo;
         this->bitsPorMuestra = bitsPorMuestra;
@@ -71,6 +94,10 @@ class GestorAlmacenamiento
 
     void guardarDato(const uint8_t *dato, int tam)
     {
+        if (!archivoAbierto) {
+            Serial.println("[SD] Error: intento de escribir en archivo WAV no abierto.");
+            return;
+        }
         //Escribimos en bloques de 16 bits porque nos conviene
         archivoAbierto.write(dato, tam);
         //archivoAbierto.flush(); //Limpiar el buffer obliga que los datos se escriban
@@ -78,12 +105,16 @@ class GestorAlmacenamiento
     
     void cerrarArchivoWAV()
     {
-        if (!archivoAbierto) return;
+        if (!archivoAbierto) {
+            Serial.println("[SD] Error: no se puede cerrar WAV porque no está abierto.");
+            return;
+        }
 
         // 1. Sincronizamos la SD para que la memoria revele el tamaño real
         archivoAbierto.flush();
         
         unsigned long tamAudio = archivoAbierto.size() - TAM_CABECERA_WAV;
+        ultimoTamAudio = tamAudio;
         int tamArchivo = tamAudio + TAM_CABECERA_WAV - 8;
         int tasaBytes = tasaMuestreo * canales * (bitsPorMuestra / 8);
 
@@ -183,30 +214,59 @@ class GestorAlmacenamiento
         Serial.println("\n-----------------------------------\n");
         archivo.close();
     }
-
-void eliminarArchivo()
+    unsigned long obtenerPesoAudioFinal() const
     {
-        if (ruta.length() > 1) 
-        {
-            if (SD.exists(ruta))
-            {
+        if (ultimoTamAudio > 0) {
+            return ultimoTamAudio;
+        }
+
+        if (ruta.length() == 0) {
+            return 0;
+        }
+
+        File archivo = SD.open(ruta, FILE_READ);
+        if (!archivo) {
+            return 0;
+        }
+
+        unsigned long tamAudio = 0;
+        if (archivo.size() > TAM_CABECERA_WAV) {
+            tamAudio = archivo.size() - TAM_CABECERA_WAV;
+        }
+        archivo.close();
+        return tamAudio;
+    }
+
+    void limpiarEstado(bool borrarArchivo = false)
+    {
+        if (archivoAbierto) {
+            archivoAbierto.close();
+        }
+
+        if (borrarArchivo && ruta.length() > 1) {
+            if (SD.exists(ruta)) {
                 SD.remove(ruta);
             }
-            ruta = ""; 
+        }
+
+        ruta = "";
+        ultimoTamAudio = 0;
+    }
+
+    void eliminarArchivo()
+    {
+        limpiarEstado(true);
+    }
+
+    void limpiarArchivosResiduales()
+    {
+        const char* rutaResiduo = "/archivoAudio.wav";
+        if (SD.exists(rutaResiduo)) {
+            SD.remove(rutaResiduo);
         }
     }
 
     ~GestorAlmacenamiento(){
-        if (archivoAbierto){
-            archivoAbierto.close();
-        }
-
-        if (ruta.length() > 1) 
-        {
-            if (SD.exists(ruta))
-            {
-                SD.remove(ruta);
-            }
-        }
+        limpiarEstado(true);
     }
 };
