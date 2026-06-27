@@ -9,6 +9,9 @@ extern QueueHandle_t colaEventos;
 #define MAX_REINTENTOS 10
 #define TIEMPO_REINTENTO 5000
 
+extern char payloadGlobal[512];
+extern volatile bool hayMensajeNuevo;
+
 void callbackMQTT(char *topic, byte *payload, unsigned int length);
 int obtenerPaginaDesdeJson(const String &jsonPayload);
 class GestorMQTT {
@@ -130,12 +133,14 @@ public:
       if (clienteMQTT.publish(topic, payload)) {
         Serial.println("[MQTT] Mensaje publicado con éxito.");
       } else {
-        Serial.println("[MQTT] ERROR CRÍTICO: PubSubClient rechazó el paquete.");
+        Serial.println(
+            "[MQTT] ERROR CRÍTICO: PubSubClient rechazó el paquete.");
         Serial.print("Tamaño del payload intentado: ");
         Serial.println(strlen(payload));
       }
     } else {
-      Serial.println("[MQTT] Error: Imposible publicar, el broker está desconectado.");
+      Serial.println(
+          "[MQTT] Error: Imposible publicar, el broker está desconectado.");
     }
   }
   void configurarReceptor(MQTT_CALLBACK_SIGNATURE) {
@@ -143,7 +148,8 @@ public:
   }
 
   String obtenerIpString() {
-    return WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : String("0.0.0.0");
+    return WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString()
+                                         : String("0.0.0.0");
   }
 
   // 2. Enviar Alerta de Audio
@@ -158,10 +164,10 @@ public:
                        ", \"endpoint\": \"" + endpoint + "\"" +
                        ", \"tamanio_bytes\": " + String(tamanioBytes) +
                        ", \"timestamp\": " + String(millis() / 1000) +
-                       ", \"ip\": \"" + ip + "\"" +
-                       "}";
+                       ", \"ip\": \"" + ip + "\"" + "}";
 
-    String payload = "{\"evento\": \"audio\", \"contenido\": " + contenido + "}";
+    String payload =
+        "{\"evento\": \"audio\", \"contenido\": " + contenido + "}";
     publicarAlerta("nonofono/mensajes/audio", payload.c_str());
   }
 
@@ -174,10 +180,10 @@ public:
     String datos = "{\"id_dispositivo\": \"" + idDispositivo + "\"" +
                    ", \"id_mensaje\": " + String(idMensaje) +
                    ", \"telefono\": \"" + numeroTelefono + "\"" +
-                   ", \"contenido\": \"" + contenido + "\"" +
-                   "}";
+                   ", \"contenido\": \"" + contenido + "\"" + "}";
 
-    String payload = "{\"evento\": \"mensaje-predefinido\", \"contenido\": " + datos + "}";
+    String payload =
+        "{\"evento\": \"mensaje-predefinido\", \"contenido\": " + datos + "}";
     publicarAlerta("nonofono/mensajes/predeterminado", payload.c_str());
   }
 
@@ -185,8 +191,10 @@ public:
     String idDispositivo = obtenerIdDispositivo();
     String ip = obtenerIpString();
 
-    String contenido = "{\"mensaje\": \"¡Emergencia! El abuelo necesita ayuda.\"}";
-    String payload = "{\"evento\": \"emergencia\", \"contenido\": " + contenido + "}";
+    String contenido =
+        "{\"mensaje\": \"¡Emergencia! El abuelo necesita ayuda.\"}";
+    String payload =
+        "{\"evento\": \"emergencia\", \"contenido\": " + contenido + "}";
 
     publicarAlerta("nonofono/emergencias", payload.c_str());
   }
@@ -246,20 +254,14 @@ void callbackMQTT(char *topic, byte *payload, unsigned int length) {
 
   // 2. Enrutamos según el tópico
   String topico = String(topic);
-  //TODO priorizar emergencias 
+  // TODO priorizar emergencias
   if (topico == "nonofono/config/contactos") {
-    // Lógica para parsear JSON de contactos y guardarlos en SD/RAM
-    // Recuerda que llegará 2 veces (5 contactos cada vez)
     Serial.println("[Router] Actualizando libreta de contactos...");
-
-    int pagina = obtenerPaginaDesdeJson(mensaje);
-    if (pagina == 2) {
-      eventoAEnviar.tipo = EV_RECIBIR_CONTACTOS_2;
-    } else if (pagina == 1) {
-      eventoAEnviar.tipo = EV_RECIBIR_CONTACTOS_1;
-    } else {
-      Serial.println("[Router] Error: Página de contactos desconocida.");
-    }
+    unsigned int tamCopia = (length < 511) ? length : 511;
+    memcpy(payloadGlobal, payload, tamCopia);
+    payloadGlobal[tamCopia] = '\0';
+    hayMensajeNuevo = true;
+    eventoAEnviar.tipo = EV_RECIBIR_CONTACTOS;
 
   } else if (topico == "nonofono/encontrar") {
     // Lógica para hacer sonar el buzzer

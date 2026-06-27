@@ -1,5 +1,5 @@
-#include <Arduino.h>
 #pragma once
+#include <Arduino.h>
 enum TipoEvento {
   EV_CONTINUE,
   EV_BTN_ARRIBA,
@@ -14,8 +14,7 @@ enum TipoEvento {
   EV_WIFI_EXITO,
   EV_WIFI_ERROR,
   EV_ENCONTRAR_DISPOSITIVO,
-  EV_RECIBIR_CONTACTOS_1,
-  EV_RECIBIR_CONTACTOS_2,
+  EV_RECIBIR_CONTACTOS,
 };
 
 struct Evento {
@@ -42,3 +41,7 @@ enum EstadoFSM {
   MOSTRANDO_ERROR
 };
 
+struct EventoFSM {
+  TipoEvento tipo;
+  char* payload; 
+};

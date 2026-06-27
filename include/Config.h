@@ -1,9 +1,11 @@
+#pragma once
 #include <Arduino.h>
 #include <Wire.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
 
+#define MAX_CONTACTOS 10
 
 #include "GestorAlmacenamiento.h"
 #include "GestorBoton.h"
@@ -46,7 +48,7 @@ const char *MQTT_PASS = "Nonofono8";
 #endif
 
 #define MAX_EVENTOS 40
-#define MAX_CONTACTOS 10
+
 #define MAX_MENSAJES 3
 #define CANT_PINES 40
 
@@ -69,6 +71,7 @@ const char *MQTT_PASS = "Nonofono8";
 // Timers
 #define BIT_TIMEOUT (1 << 0)
 #define BIT_BUZZER_FIN (1 << 1)
+#define BIT_WIFI_TIMEOUT (1 << 2)
 
 // ==========================================
 // DEFINICIÓN DE PINES (ESP32 30-Pines)
@@ -108,3 +111,10 @@ const int BTN_CANCELAR = 35;
 const int BTN_GRABAR = 4;
 const int BTN_EMERGENCIA = 13;
 
+char payloadGlobal[512]; // buffer obligatorio para almacenar el payload
+                         // recibido en la función callbackMQTT
+// se hace asi para no cambiar toda la estructura global y porque el gasto de
+// memoria es mínimo
+volatile bool hayMensajeNuevo =
+    false; // se actualiza en main y en el callbackMQTT para indicar que hay un
+           // mensaje nuevo que procesar

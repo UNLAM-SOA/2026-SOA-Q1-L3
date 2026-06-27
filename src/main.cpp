@@ -1,7 +1,11 @@
 #include "Config.h"
 #include <Arduino.h>
+#include <Preferences.h>
 
+extern char payloadGlobal[512];
+extern volatile bool hayMensajeNuevo;
 
+Contacto listaContactos[MAX_CONTACTOS] = {};
 
 
 // ==========================================
@@ -13,19 +17,7 @@ Evento evento, eventoAnterior;
 EstadoFSM estadoActual = INIT;
 EstadoFSM estadoAnterior = INIT;
 
-// --- Variables de Datos (Mockups) ---
-// Esto va a llegar desde android, por ahora se hardcodea
-Contacto listaContactos[MAX_CONTACTOS] = {
-    {"Hijo - Lucas", "+54 9 11 1234 5678"},
-    {"Dra. Garcia", "+54 9 11 2345 6789"},
-    {"Emergencias", "+54 9 11 0000 0000"},
-    {"Vecino Juan", "+54 9 11 3456 7890"},
-    {"Farmacia", "+54 9 11 4567 8901"},
-    {"Hija - Maria", "+54 9 11 5678 9012"},
-    {"Sobrino Alex", "+54 9 11 6789 0123"},
-    {"Cuidado 24hs", "+54 9 11 7890 1234"},
-    {"Bomberos", "+54 9 11 9111 9111"},
-    {"Taxi Confianza", "+54 9 11 9123 4567"}};
+// --- Variables de Datos (persistidas en memoria no volátil) ---
 String listaMensajes[MAX_MENSAJES] = {"Llamame", "Todo bien", "Ven a casa"};
 
 int indiceContacto = 0;
@@ -46,7 +38,7 @@ GestorDeMicrofono gestorAudio(BUZZER_PIN, LED_PIN, POT_PIN, FREC_BUZZER,
                               MIC_SCK, MIC_WS, MIC_SD);
 
 QueueHandle_t colaEventos;
-TimerHandle_t xTimeoutTimer, xRecordingTimer, xBuzzerTimer;
+TimerHandle_t xTimeoutTimer, xRecordingTimer, xBuzzerTimer, xWiFiTimeoutTimer;
 TaskHandle_t getEventHandler;
 
   #ifdef ACTIVAR_RED
@@ -113,6 +105,7 @@ void taskGrabacionAudio(void *pvParameters) {
 
 void vTimeoutCallback(TimerHandle_t xTimer);
 void vBuzzerCallback(TimerHandle_t xTimer);
+void vWiFiTimeoutCallback(TimerHandle_t xTimer);
 bool leerBotonUnClic(int pin);
 void setup();
 void loop();
@@ -135,6 +128,11 @@ void vTimeoutCallback(TimerHandle_t xTimer) {
 void vBuzzerCallback(TimerHandle_t xTimer) {
   xTaskNotify(getEventHandler, BIT_BUZZER_FIN, eSetBits);
 }
+
+void vWiFiTimeoutCallback(TimerHandle_t xTimer) {
+  xTaskNotify(getEventHandler, BIT_WIFI_TIMEOUT, eSetBits);
+}
+
 /*
 esta funcion detecta el flanco descendente del click, junto con los 50ms del
 vTaskDelay en taskEvento permite leer correctamente los clicks
@@ -190,6 +188,7 @@ void setup() {
   }
 
   Serial.println("Setup completado. Iniciando FSM...");
+  cargarContactosDesdeMemoriaPersistente();
   gestorUI.iniciar();
 
   #ifdef ACTIVAR_RED
@@ -222,6 +221,9 @@ void setup() {
 
   xBuzzerTimer = xTimerCreate("BuzzerTimer", pdMS_TO_TICKS(TIMEOUT_BUZZER),
                               pdFALSE, NULL, vBuzzerCallback);
+
+  xWiFiTimeoutTimer = xTimerCreate("WiFiTimeoutTimer", pdMS_TO_TICKS(TIMEOUT_EXITO_FRACASO),
+                                  pdFALSE, NULL, vWiFiTimeoutCallback);
 }
 
 void loop() { vTaskDelete(NULL); }
@@ -250,7 +252,11 @@ void taskEvento(void *pvParameters) {
       evento.tipo = EV_TIMEOUT;
     } else if (notificaciones & BIT_BUZZER_FIN) {
       evento.tipo = EV_BUZZER_FIN;
-    } else if (leerBotonUnClic(BTN_ARRIBA)) {
+    } 
+    else if (notificaciones & BIT_WIFI_TIMEOUT) {
+      evento.tipo = EV_WIFI_ERROR;
+    }
+    else if (leerBotonUnClic(BTN_ARRIBA)) {
       evento.tipo = EV_BTN_ARRIBA;
     } else if (leerBotonUnClic(BTN_ABAJO)) {
       evento.tipo = EV_BTN_ABAJO;
@@ -262,14 +268,14 @@ void taskEvento(void *pvParameters) {
       evento.tipo = EV_BTN_GRABAR;
     }
     // Eventos internos (WiFi)
-    else if (estadoActual == ESPERANDO_WIFI) {
-      auto r = gestorRed.actualizar();
-      if (r == GestorDeRed::EXITO) {
-        evento.tipo = EV_WIFI_EXITO;
-      } else if (r == GestorDeRed::ERROR) {
-        evento.tipo = EV_WIFI_ERROR;
-      }
-    }
+    // else if (estadoActual == ESPERANDO_WIFI) {
+    //   auto r = gestorRed.actualizar();
+    //   if (r == GestorDeRed::EXITO) {
+    //     evento.tipo = EV_WIFI_EXITO;
+    //   } else if (r == GestorDeRed::ERROR) {
+    //     evento.tipo = EV_WIFI_ERROR;
+    //   }
+    // }
 
 #if SERIAL_ENABLED
     if (evento.tipo != eventoAnterior.tipo) {
@@ -330,8 +336,10 @@ void taskFSM(void *pvParameters) {
       //------------------------------------------
       case IDLE: {
         switch (evento.tipo) {
-        case EV_CONTINUE:
-
+        case EV_RECIBIR_CONTACTOS:
+            procesarContactosDesdeJson(payloadGlobal);
+            cargarContactosDesdeMemoriaPersistente();
+            Serial.println("Contactos actualizados desde JSON.");
           break;
         case EV_BTN_ARRIBA:
         case EV_BTN_ABAJO:
@@ -343,14 +351,6 @@ void taskFSM(void *pvParameters) {
           gestorAudio.encenderBuzzer();
           delay(DELAY_ENCONTRAR_DISPOSITIVO);
           gestorAudio.apagarBuzzer();
-          break;
-        case EV_RECIBIR_CONTACTOS_1:
-          // Aquí puedes manejar la recepción de contactos desde la red
-          Serial.println("Evento: EV_RECIBIR_CONTACTOS_1 recibido.");
-          break;
-        case EV_RECIBIR_CONTACTOS_2:
-          // Aquí puedes manejar la recepción de contactos desde la red
-          Serial.println("Evento: EV_RECIBIR_CONTACTOS_2 recibido.");
           break;
         case EV_BTN_EMERGENCIA:
           estadoActual = EMERGENCIA;
@@ -550,6 +550,7 @@ void taskFSM(void *pvParameters) {
             gestorMQTT.notificarMensajePredeterminado(listaContactos[indiceContacto].telefono, listaMensajes[indiceMensaje]);
           #endif
           estadoActual = ESPERANDO_WIFI;
+          xTimerStart(xWiFiTimeoutTimer, 0);
           gestorUI.mostrarEnviando();
           xTimerStop(xTimeoutTimer, 0);
           break;
@@ -589,6 +590,7 @@ void taskFSM(void *pvParameters) {
               gestorMQTT.notificarAudio(listaContactos[indiceContacto].telefono, "/descargar_audio", gestorSD.obtenerPesoAudioFinal());
             #endif
             estadoActual = ESPERANDO_WIFI;
+            xTimerStart(xWiFiTimeoutTimer, 0);
             gestorUI.mostrarEnviando();
             //gestorSD.enviarArchivoPorSerial();
             xTimerStop(xTimeoutTimer, 0);
@@ -618,7 +620,9 @@ void taskFSM(void *pvParameters) {
           xTimerReset(xTimeoutTimer, 0);
           break;
         case EV_TIMEOUT:
+          
           estadoActual = ESPERANDO_WIFI;
+          xTimerStart(xWiFiTimeoutTimer, 0);
           gestorUI.mostrarEnviando();
           xTimerStop(xTimeoutTimer, 0);
           break;
