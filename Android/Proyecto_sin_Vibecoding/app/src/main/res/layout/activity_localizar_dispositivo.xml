@@ -17,7 +17,7 @@
         android:layout_marginTop="64dp"/>
 
     <TextView
-        android:id="@+id/txtInstruccion"
+        android:id="@+id/txtEstado"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/localizar_dispositivo_descripcion"
@@ -34,7 +34,7 @@
         android:layout_height="wrap_content"
         android:text="@string/emoji_telefono"
         android:textSize="64sp"
-        app:layout_constraintTop_toBottomOf="@id/txtInstruccion"
+        app:layout_constraintTop_toBottomOf="@id/txtEstado"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="48dp"/>

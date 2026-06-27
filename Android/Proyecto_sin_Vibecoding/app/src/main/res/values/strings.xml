@@ -16,11 +16,10 @@
 
     <!-- Localizar Dispositivo -->
     <string name="localizar_dispositivo_descripcion">Agite el teléfono para encontrar su dispositivo.</string>
+    <string name="localizar_dispositivo_movimiento_detectado">Buscando Nonofono…</string>
 
     <!-- Miscelaneos -->
     <string name="emoji_telefono">📱</string>
     <string name="localizar_dispositivo_titulo">Buscar Dispositivo</string>
-    <string name="columna_nombre_tabla">Nombre</string>
-    <string name="nro_telef_tabla">Nro telefónico</string>
 
 </resources>
