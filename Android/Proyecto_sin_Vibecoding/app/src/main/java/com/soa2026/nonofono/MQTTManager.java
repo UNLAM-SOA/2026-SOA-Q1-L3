@@ -1,21 +1,32 @@
 package com.soa2026.nonofono;
+import android.content.Context;
+
 import org.eclipse.paho.client.mqttv3.*;
 import javax.net.ssl.SSLSocketFactory;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.util.ArrayList;
+
 public class MQTTManager {
 
     private MqttClient client;
     private static MQTTManager instance;
-
+    private TelegramApi apiTelegram;
+    private Context contexto;
     private String ip;
 
-    public static synchronized MQTTManager getInstance() {
+    public MQTTManager(Context contexto){
+        apiTelegram = new TelegramApi("8322654023:AAHhtylDzV06H71m-Xko3mhbg2TQ3J5brdA");
+        this.contexto = contexto;
+    }
+
+    public static synchronized MQTTManager getInstance(Context contexto) {
 
         if (instance == null)
-            instance = new MQTTManager();
+            instance = new MQTTManager(contexto);
 
         return instance;
     }
@@ -108,7 +119,20 @@ public class MQTTManager {
 
         if(evento.equals("emergencia"))
         {
-            //TODO Notificar a todo el mundo por mensaje o notificacion
+            String mensajeEmergencia = jsonContenido.getString("mensaje");
+
+            new Thread(() -> {
+                ArrayList<Contacto> contactos = ContactosManager.cargar(contexto);
+
+                for(Contacto cont : contactos){
+                    Long chatId = cont.getChatId();
+
+                    if(chatId != null){
+                        apiTelegram.enviarMensaje(String.valueOf(chatId), mensajeEmergencia);
+                    }
+                }
+
+            }).start();
         }
         if(evento.equals("ip"))
         {
@@ -117,10 +141,71 @@ public class MQTTManager {
         }
         if (evento.equals("audio")) {
             String audio = jsonContenido.getString("audio");
-            AudioDownloader.descargar(ip,audio);
-            System.out.println("Mensaje recibido :D");
+
+            new Thread(() -> {
+                AudioDownloader.descargar(ip,"/data/data/com.soa2026.nonofono/files/", audio);
+                System.out.println("Mensaje recibido :D");
+
+                File archAudio = new File("/data/data/com.soa2026.nonofono/files/", audio);
+                String telefono = null;
+                try {
+                    telefono = jsonContenido.getString("destinatario");
+                    Contacto destino = buscarContacto(telefono);
+
+                    if (destino == null){
+                        System.err.println("No se encontró el destinatario del mensaje");
+                    } else {
+                        JSONObject respuesta = new JSONObject(apiTelegram.enviarAudio(
+                                String.valueOf(destino.getChatId()),
+                                archAudio));
+
+
+                        if(respuesta.getBoolean("ok")){
+                            publicar("nonofono/mensajes/audio/ack", "{\"exito\":\"Ok\"}");
+                        }
+
+                        System.out.println(respuesta);
+                    }
+                } catch (JSONException | MqttException e) {
+                    throw new RuntimeException(e);
+                }
+            }).start();
+        }
+        if(evento.equals("mensaje-predefinido")){
+            String telefono = jsonContenido.getString("telefono");
+            String msj = jsonContenido.getString("contenido");
+
+            Contacto destino = buscarContacto(telefono);
+
+            if (destino != null){
+                JSONObject respuesta = new JSONObject(apiTelegram.enviarMensaje(String.valueOf(destino.getChatId()), msj));
+
+                if (respuesta.getBoolean("ok")){
+                    try {
+                        publicar("nonofono/mensajes/predeterminado/ack", "{\"exito\":\"Ok\"}");
+                    } catch (MqttException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            } else {
+                System.err.println("No se encontró el destinatario del mensaje");
+            }
         }
 
         System.out.println("Mensaje: " + mensaje);
+    }
+
+    private Contacto buscarContacto(String telefono){
+        ArrayList<Contacto> contactos = ContactosManager.cargar(contexto);
+        int i = 0, tam = contactos.size();
+
+        while(i < tam && !contactos.get(i).getTelefono().equals(telefono)){
+            i++;
+        }
+
+        if (i < tam)
+            return contactos.get(i);
+
+        return null;
     }
 }

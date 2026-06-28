@@ -10,55 +10,51 @@ import java.net.URL;
 
 public class AudioDownloader {
 
-    public static void descargar(String ip, String archivo) {
+    public static void descargar(String ip, String ruta, String archivo) {
 
-        new Thread(() -> {
+        try {
 
-            try {
+            String urlStr =
+                    "http://" + ip + "/audio/" + archivo;
 
-                String urlStr =
-                        "http://" + ip + "/audio/" + archivo;
+            Log.d("HTTP", "Descargando desde: " + urlStr);
 
-                Log.d("HTTP", "Descargando desde: " + urlStr);
+            URL url = new URL(urlStr);
+            HttpURLConnection conn =
+                    (HttpURLConnection) url.openConnection();
 
-                URL url = new URL(urlStr);
-                HttpURLConnection conn =
-                        (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.connect();
 
-                conn.setRequestMethod("GET");
-                conn.connect();
-
-                if (conn.getResponseCode() != 200) {
-                    Log.e("HTTP", "Error HTTP: " + conn.getResponseCode());
-                    return;
-                }
-
-                InputStream input = conn.getInputStream();
-
-                File file = new File(
-                        "/data/data/com.soa2026.nonofono/files/",
-                        archivo
-                );
-
-                FileOutputStream output =
-                        new FileOutputStream(file);
-
-                byte[] buffer = new byte[4096];
-                int len;
-
-                while ((len = input.read(buffer)) != -1) {
-                    output.write(buffer, 0, len);
-                }
-
-                output.close();
-                input.close();
-
-                Log.d("HTTP", "Audio descargado correctamente");
-
-            } catch (Exception e) {
-                Log.e("HTTP", "Error descargando audio", e);
+            if (conn.getResponseCode() != 200) {
+                Log.e("HTTP", "Error HTTP: " + conn.getResponseCode());
+                return;
             }
 
-        }).start();
+            InputStream input = conn.getInputStream();
+
+            File file = new File(
+                    ruta,
+                    archivo
+            );
+
+            FileOutputStream output =
+                    new FileOutputStream(file);
+
+            byte[] buffer = new byte[4096];
+            int len;
+
+            while ((len = input.read(buffer)) != -1) {
+                output.write(buffer, 0, len);
+            }
+
+            output.close();
+            input.close();
+
+            Log.d("HTTP", "Audio descargado correctamente");
+
+        } catch (Exception e) {
+            Log.e("HTTP", "Error descargando audio", e);
+        }
     }
 }

@@ -43,7 +43,7 @@ public class LocalizarDispositivoActivity extends AppCompatActivity
                         Sensor.TYPE_ACCELEROMETER
                 );
 
-        mqttManager = MQTTManager.getInstance();
+        mqttManager = MQTTManager.getInstance(this);
     }
 
     @Override
