@@ -4,6 +4,7 @@ import android.content.Context;
 import org.eclipse.paho.client.mqttv3.*;
 import javax.net.ssl.SSLSocketFactory;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -89,6 +90,7 @@ public class MQTTManager {
         client.subscribe("nonofono/emergencias");
         client.subscribe("nonofono/mensajes/audio");
         client.subscribe("nonofono/mensajes/predeterminado");
+        client.subscribe("nonofono/live");
     }
 
     public void publicar(String topic, String mensaje) throws MqttException {
@@ -134,12 +136,12 @@ public class MQTTManager {
 
             }).start();
         }
-        if(evento.equals("ip"))
+        else if(evento.equals("ip"))
         {
             ip = jsonContenido.getString("ip");
             System.out.println("IP: " + ip);
         }
-        if (evento.equals("audio")) {
+        else if (evento.equals("audio")) {
             String audio = jsonContenido.getString("audio");
 
             new Thread(() -> {
@@ -171,7 +173,7 @@ public class MQTTManager {
                 }
             }).start();
         }
-        if(evento.equals("mensaje-predefinido")){
+        else if(evento.equals("mensaje-predefinido")){
             String telefono = jsonContenido.getString("telefono");
             String msj = jsonContenido.getString("contenido");
 
@@ -189,6 +191,29 @@ public class MQTTManager {
                 }
             } else {
                 System.err.println("No se encontró el destinatario del mensaje");
+            }
+        }
+        else if (evento.equals("live")){
+            ArrayList<Contacto> contactos = ContactosManager.cargar(contexto);
+
+            JSONArray arrayContactos = new JSONArray();
+
+            if(!contactos.isEmpty()){
+                for(Contacto cont : contactos){
+                    JSONObject contactoActual = new JSONObject();
+                    contactoActual.put("name", cont.getNombre());
+                    contactoActual.put("phone", cont.getTelefono());
+                    arrayContactos.put(contactoActual);
+                }
+
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(500);
+                        publicar("nonofono/config/contactos", arrayContactos.toString());
+                    } catch (MqttException | InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).start();
             }
         }
 
