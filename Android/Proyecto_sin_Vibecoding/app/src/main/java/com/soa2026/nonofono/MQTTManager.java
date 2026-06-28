@@ -86,7 +86,6 @@ public class MQTTManager {
         if (client == null || !client.isConnected())
             return;
 
-        client.subscribe("nonofono/ip");
         client.subscribe("nonofono/emergencias");
         client.subscribe("nonofono/mensajes/audio");
         client.subscribe("nonofono/mensajes/predeterminado");
@@ -108,16 +107,14 @@ public class MQTTManager {
     }
 
     private void procesarMensaje(String mensaje) throws JSONException {
+        System.out.println("Mensaje: " + mensaje);
+        JSONObject json = new JSONObject(mensaje);
+        String evento = json.getString("evento");
 
-        JSONObject json =
-                new JSONObject(mensaje);
+        // SOLUCIÓN 1: Extraer directamente como JSONObject
+        JSONObject jsonContenido = json.getJSONObject("contenido");
 
-        String evento =
-                json.getString("evento");
 
-        String contenido = json.getString("contenido");
-        JSONObject jsonContenido =
-                new JSONObject(contenido);
 
         if(evento.equals("emergencia"))
         {
@@ -136,14 +133,12 @@ public class MQTTManager {
 
             }).start();
         }
-        else if(evento.equals("ip"))
-        {
-            ip = jsonContenido.getString("ip");
-            System.out.println("IP: " + ip);
-        }
-        else if (evento.equals("audio")) {
+        /*else if (evento.equals("audio")) {
             String audio = jsonContenido.getString("audio");
-
+            System.out.println("RESPUESTA JSON:\n"+jsonContenido.toString());
+            System.out.println(audio);
+            ip=jsonContenido.getString("ip");
+            System.out.println("IP A ENVIAR: " + ip);
             new Thread(() -> {
                 AudioDownloader.descargar(ip,"/data/data/com.soa2026.nonofono/files/", audio);
                 System.out.println("Mensaje recibido :D");
@@ -170,6 +165,49 @@ public class MQTTManager {
                     }
                 } catch (JSONException | MqttException e) {
                     throw new RuntimeException(e);
+                }
+            }).start();
+        }*/
+        else if (evento.equals("audio")) {
+
+            // SOLUCIÓN 2: Extraemos los datos que SÍ existen en el JSON
+            String ip = jsonContenido.getString("ip");
+            String endpoint = jsonContenido.getString("endpoint");
+            int idMensaje = jsonContenido.getInt("id_mensaje");
+
+            // Inventamos el nombre del archivo de audio ya que no viene en el JSON
+            String nombreArchivo = "audio_" + idMensaje + ".wav";
+
+            System.out.println("RESPUESTA JSON:\n" + jsonContenido.toString());
+            System.out.println("IP A ENVIAR: " + ip);
+
+            new Thread(() -> {
+                // Mover el try-catch para que cubra todo el bloque del hilo
+                try {
+                    AudioDownloader.descargar(ip, "/data/data/com.soa2026.nonofono/files/", nombreArchivo);
+                    System.out.println("Mensaje recibido :D");
+
+                    File archAudio = new File("/data/data/com.soa2026.nonofono/files/", nombreArchivo);
+
+                    String telefono = jsonContenido.getString("destinatario");
+                    Contacto destino = buscarContacto(telefono);
+
+                    if (destino == null) {
+                        System.err.println("No se encontró el destinatario del mensaje");
+                    } else {
+                        JSONObject respuesta = new JSONObject(apiTelegram.enviarAudio(
+                                String.valueOf(destino.getChatId()),
+                                archAudio));
+
+                        if(respuesta.getBoolean("ok")){
+                            publicar("nonofono/mensajes/audio/ack", "{\"exito\":\"Ok\"}");
+                        }
+                        System.out.println(respuesta);
+                    }
+                } catch (JSONException | MqttException e) {
+                    System.err.println("Error procesando audio en el hilo: " + e.getMessage());
+                } catch (Exception e) {
+                    System.err.println("Error general en descarga: " + e.getMessage());
                 }
             }).start();
         }
@@ -217,7 +255,7 @@ public class MQTTManager {
             }
         }
 
-        System.out.println("Mensaje: " + mensaje);
+
     }
 
     private Contacto buscarContacto(String telefono){

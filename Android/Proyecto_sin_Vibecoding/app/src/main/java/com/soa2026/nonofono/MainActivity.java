@@ -88,6 +88,7 @@ public class MainActivity extends AppCompatActivity {
             System.out.println(json);
 
             try {
+                //TODO algo explota cuando json=null
                 JSONObject objeto = new JSONObject(json);
                 JSONArray resultados = objeto.getJSONArray("result");
                 long updateId = 0;
