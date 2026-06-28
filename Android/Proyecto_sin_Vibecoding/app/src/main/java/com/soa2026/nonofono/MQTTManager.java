@@ -14,8 +14,8 @@ public class MQTTManager {
 
     private MqttClient client;
     private static MQTTManager instance;
-    private TelegramApi apiTelegram;
-    private Context contexto;
+    private final TelegramApi apiTelegram;
+    private final Context contexto;
     private String ip;
 
     public MQTTManager(Context contexto){
@@ -147,7 +147,7 @@ public class MQTTManager {
                 System.out.println("Mensaje recibido :D");
 
                 File archAudio = new File("/data/data/com.soa2026.nonofono/files/", audio);
-                String telefono = null;
+                String telefono;
                 try {
                     telefono = jsonContenido.getString("destinatario");
                     Contacto destino = buscarContacto(telefono);

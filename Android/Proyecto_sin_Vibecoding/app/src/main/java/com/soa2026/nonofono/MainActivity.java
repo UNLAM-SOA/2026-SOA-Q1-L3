@@ -60,6 +60,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
 
+        actualizarContactos();
+    }
+
+    private void actualizarContactos()
+    {
         new Thread(() -> {
             //Recuperamos el conjunto de contactos
             ArrayList<Contacto> contactos = ContactosManager.cargar(this);
@@ -110,11 +115,11 @@ public class MainActivity extends AppCompatActivity {
                 chatIds.removeAll(idsAsociadas);
 
                 for (long id : chatIds) {
-                    telegram.enviarMensaje(String.valueOf(id), "Por favor, envíe un mensaje que SOLAMENTE CONTENGA su número telefónico");
+                    telegram.enviarMensaje(String.valueOf(id), "Por favor, envíe un mensaje que SOLAMENTE CONTENGA su número telefónico (11 digitos sin espacios)");
                 }
 
                 for (long id : idsConNumero) {
-                    telegram.enviarMensaje(String.valueOf(id), "Gracias por colaborar, ya puede recibir mensajes y noticias del abuelo");
+                    telegram.enviarMensaje(String.valueOf(id), "Gracias por colaborar, ya puede recibir mensajes y noticias del nono");
                 }
 
                 for (Contacto cont : contactos) {
