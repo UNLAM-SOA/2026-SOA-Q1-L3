@@ -152,7 +152,14 @@ public:
                                          : String("0.0.0.0");
   }
 
-  // 2. Enviar Alerta de Audio
+  void notificarLive() {
+
+    String contenido="{}";
+    String payload =
+        "{\"evento\": \"live\", \"contenido\": " + contenido + "}";
+    publicarAlerta("nonofono/live", payload.c_str());
+  }
+
   void notificarAudio(String destinatario, String endpoint, long tamanioBytes) {
     long idMensaje = generarIdMensajePersistente();
     String idDispositivo = obtenerIdDispositivo();

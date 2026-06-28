@@ -329,6 +329,9 @@ void taskFSM(void *pvParameters) {
           gestorUI.mostrarPantallaReposo();
           indiceContacto = 0;
           estadoActual = IDLE;
+          #ifdef ACTIVAR_RED
+            gestorMQTT.notificarLive();
+          #endif
           break;
         }
       } break;

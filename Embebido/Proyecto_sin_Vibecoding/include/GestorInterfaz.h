@@ -32,7 +32,7 @@ public:
 
     void mostrarPantallaReposo() {
         lcd.clear();
-        lcd.setCursor(1, 0); lcd.print("BIENVENIDO CARLOS");
+        lcd.setCursor(1, 0); lcd.print("BIENVENIDO NONO");
         lcd.setCursor(0, 1); lcd.print("PRESIONE ARRIBA ^");
         lcd.setCursor(0, 2); lcd.print("O ABAJO v PARA");
         lcd.setCursor(0, 3); lcd.print("ENVIAR MENSAJES");
