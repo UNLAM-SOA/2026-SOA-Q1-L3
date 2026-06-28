@@ -6,13 +6,8 @@ import android.content.SharedPreferences;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 
-import android.content.Context;
-import android.content.SharedPreferences;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
-
-import java.util.ArrayList;
 
 public class ContactosManager {
     private static final String PREFS = "contactos";

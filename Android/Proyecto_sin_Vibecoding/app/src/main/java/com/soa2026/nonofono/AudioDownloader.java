@@ -15,7 +15,7 @@ public class AudioDownloader {
         try {
 
             String urlStr =
-                    "http://" + ip + "/audio/" + archivo;
+                    "http://" + ip + "/descargar_audio";
 
             Log.d("HTTP", "Descargando desde: " + urlStr);
 
