@@ -10,7 +10,7 @@ import java.net.URL;
 
 public class AudioDownloader {
 
-    public static void descargar(String ip, String ruta, String archivo) {
+    public static boolean descargar(String ip, String ruta, String archivo) {
 
         try {
 
@@ -28,7 +28,7 @@ public class AudioDownloader {
 
             if (conn.getResponseCode() != 200) {
                 Log.e("HTTP", "Error HTTP: " + conn.getResponseCode());
-                return;
+                return false; // ¡Avisamos que falló!
             }
 
             InputStream input = conn.getInputStream();
@@ -53,8 +53,10 @@ public class AudioDownloader {
 
             Log.d("HTTP", "Audio descargado correctamente");
 
+            return true; // ¡Éxito!
         } catch (Exception e) {
             Log.e("HTTP", "Error descargando audio", e);
+            return false; // Hubo un error de red
         }
-    }
-}
+
+}}

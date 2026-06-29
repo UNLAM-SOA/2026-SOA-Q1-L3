@@ -49,8 +49,9 @@ public class MainActivity extends AppCompatActivity {
         btnLocalizarDispositivo.setOnClickListener(v -> startActivity(new Intent(
                 MainActivity.this,
                 LocalizarDispositivoActivity.class)));
-
-        mqttManager = MQTTManager.getInstance(this);
+        //Cambié esta linea por el contexto de esta linea porque sino al destruir la
+        //activity provocaba un memory leak
+        mqttManager = MQTTManager.getInstance(this.getApplicationContext());
 
         conectarMQTT();
         telegram = new TelegramApi("8322654023:AAHhtylDzV06H71m-Xko3mhbg2TQ3J5brdA");
@@ -86,9 +87,12 @@ public class MainActivity extends AppCompatActivity {
             String json = telegram.getUpdates(offset);
 
             System.out.println(json);
-
+            if (json == null || json.trim().isEmpty()) {
+                System.err.println("No se pudo obtener respuesta de Telegram. Reintentando luego...");
+                return; // Salimos del hilo limpiamente
+            }
             try {
-                //TODO algo explota cuando json=null
+
                 JSONObject objeto = new JSONObject(json);
                 JSONArray resultados = objeto.getJSONArray("result");
                 long updateId = 0;

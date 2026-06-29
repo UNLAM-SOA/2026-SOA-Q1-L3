@@ -38,7 +38,7 @@ public class MQTTManager {
             return;
 
         String broker =
-                "ssl://e10a0f3769d14449b0472d6e60e344a9.s1.eu.hivemq.cloud:8883";
+                "ssl://e32525b034cd4ef5a01f6e9715295f64.s1.eu.hivemq.cloud";
 
         MemoryPersistence persistence = new MemoryPersistence();
 
@@ -133,41 +133,6 @@ public class MQTTManager {
 
             }).start();
         }
-        /*else if (evento.equals("audio")) {
-            String audio = jsonContenido.getString("audio");
-            System.out.println("RESPUESTA JSON:\n"+jsonContenido.toString());
-            System.out.println(audio);
-            ip=jsonContenido.getString("ip");
-            System.out.println("IP A ENVIAR: " + ip);
-            new Thread(() -> {
-                AudioDownloader.descargar(ip,"/data/data/com.soa2026.nonofono/files/", audio);
-                System.out.println("Mensaje recibido :D");
-
-                File archAudio = new File("/data/data/com.soa2026.nonofono/files/", audio);
-                String telefono;
-                try {
-                    telefono = jsonContenido.getString("destinatario");
-                    Contacto destino = buscarContacto(telefono);
-
-                    if (destino == null){
-                        System.err.println("No se encontró el destinatario del mensaje");
-                    } else {
-                        JSONObject respuesta = new JSONObject(apiTelegram.enviarAudio(
-                                String.valueOf(destino.getChatId()),
-                                archAudio));
-
-
-                        if(respuesta.getBoolean("ok")){
-                            publicar("nonofono/mensajes/audio/ack", "{\"exito\":\"Ok\"}");
-                        }
-
-                        System.out.println(respuesta);
-                    }
-                } catch (JSONException | MqttException e) {
-                    throw new RuntimeException(e);
-                }
-            }).start();
-        }*/
         else if (evento.equals("audio")) {
 
             // SOLUCIÓN 2: Extraemos los datos que SÍ existen en el JSON
@@ -184,11 +149,15 @@ public class MQTTManager {
             new Thread(() -> {
                 // Mover el try-catch para que cubra todo el bloque del hilo
                 try {
-                    AudioDownloader.descargar(ip, "/data/data/com.soa2026.nonofono/files/", nombreArchivo);
-                    System.out.println("Mensaje recibido :D");
+                    boolean exito = AudioDownloader.descargar(ip, "/data/data/com.soa2026.nonofono/files/", nombreArchivo);
+
+                    if (!exito) {
+                        System.err.println("Se aborta el envío a Telegram porque la descarga falló.");
+                        return; // Cortamos la ejecución acá
+                    }
 
                     File archAudio = new File("/data/data/com.soa2026.nonofono/files/", nombreArchivo);
-
+                    System.out.println("Mensaje recibido :D");
                     String telefono = jsonContenido.getString("destinatario");
                     Contacto destino = buscarContacto(telefono);
 
@@ -199,10 +168,11 @@ public class MQTTManager {
                                 String.valueOf(destino.getChatId()),
                                 archAudio));
 
-                        if(respuesta.getBoolean("ok")){
+                        if(respuesta.optBoolean("ok", false)
+                        ){
                             publicar("nonofono/mensajes/audio/ack", "{\"exito\":\"Ok\"}");
                         }
-                        System.out.println(respuesta);
+                        System.out.println("Respuesta al audio: "+respuesta);
                     }
                 } catch (JSONException | MqttException e) {
                     System.err.println("Error procesando audio en el hilo: " + e.getMessage());
@@ -218,17 +188,26 @@ public class MQTTManager {
             Contacto destino = buscarContacto(telefono);
 
             if (destino != null){
-                JSONObject respuesta = new JSONObject(apiTelegram.enviarMensaje(String.valueOf(destino.getChatId()), msj));
+                String respuestaString = apiTelegram.enviarMensaje(String.valueOf(destino.getChatId()), msj);
 
-                if (respuesta.getBoolean("ok")){
+                // Blindaje contra nulos y fallos de red
+                if (respuestaString != null) {
                     try {
-                        publicar("nonofono/mensajes/predeterminado/ack", "{\"exito\":\"Ok\"}");
-                    } catch (MqttException e) {
-                        throw new RuntimeException(e);
+                        JSONObject respuesta = new JSONObject(respuestaString);
+                        if (respuesta.optBoolean("ok", false)){
+                            publicar("nonofono/mensajes/predeterminado/ack", "{\"exito\":\"Ok\"}");
+                            System.out.println("Mensaje predefinido enviado con éxito.");
+                        } else {
+                            System.err.println("Telegram rechazó el mensaje: " + respuestaString);
+                        }
+                    } catch (JSONException | MqttException e) {
+                        System.err.println("Error procesando respuesta de Telegram: " + e.getMessage());
                     }
+                } else {
+                    System.err.println("Error de red: apiTelegram devolvió null");
                 }
             } else {
-                System.err.println("No se encontró el destinatario del mensaje");
+                System.err.println("No se encontró el destinatario del mensaje predefinido");
             }
         }
         else if (evento.equals("live")){
