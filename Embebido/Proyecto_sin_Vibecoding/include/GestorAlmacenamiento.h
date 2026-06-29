@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
+#include <freertos/semphr.h>
 
 #define TAMANO_DATO 512
 #define AJUSTE_POR_POS 256
@@ -13,9 +14,25 @@ class GestorAlmacenamiento
     int pinCS, pinSCK, pinMISO, pinMOSI;
     File archivoAbierto;
     String ruta;
+    SemaphoreHandle_t mutexArchivo;
     //Archivo de audio
     int tasaMuestreo, bitsPorMuestra, canales;
     unsigned long ultimoTamAudio = 0;
+
+    bool tomarMutexArchivo(TickType_t espera = portMAX_DELAY)
+    {
+        if (mutexArchivo == NULL) {
+            return true;
+        }
+        return xSemaphoreTake(mutexArchivo, espera) == pdTRUE;
+    }
+
+    void soltarMutexArchivo()
+    {
+        if (mutexArchivo != NULL) {
+            xSemaphoreGive(mutexArchivo);
+        }
+    }
 
     public:
     GestorAlmacenamiento(int SD_CS, int SD_SCK, int SD_MISO, int SD_MOSI)
@@ -24,6 +41,10 @@ class GestorAlmacenamiento
         pinSCK = SD_SCK;
         pinMISO = SD_MISO;
         pinMOSI = SD_MOSI;
+        mutexArchivo = xSemaphoreCreateMutex();
+        if (mutexArchivo == NULL) {
+            Serial.println("[SD] Error: no se pudo crear el mutex de acceso a la SD.");
+        }
     }
 
     bool iniciarSD()
@@ -35,6 +56,11 @@ class GestorAlmacenamiento
 
     void abrirArchivoWAV(const String archivo, int tasaMuestreo, int bitsPorMuestra, int canales)
     {
+        if (!tomarMutexArchivo()) {
+            Serial.println("[SD] Error: no se pudo tomar el mutex para abrir el WAV.");
+            return;
+        }
+
         if (archivoAbierto) {
             Serial.println("[SD] Aviso: cerrando archivo WAV anterior antes de crear uno nuevo.");
             archivoAbierto.close();
@@ -62,6 +88,7 @@ class GestorAlmacenamiento
                 Serial.println("[SD] El archivo anterior sigue existiendo tras el intento de apertura.");
             }
             ruta = "";
+            soltarMutexArchivo();
             return;
         }
 
@@ -72,6 +99,7 @@ class GestorAlmacenamiento
         this->canales = canales;
 
         archivoAbierto.write(header, TAM_CABECERA_WAV);
+        soltarMutexArchivo();
     }
 
     void enviarArchivoPorSerial()
@@ -94,19 +122,32 @@ class GestorAlmacenamiento
 
     void guardarDato(const uint8_t *dato, int tam)
     {
+        if (!tomarMutexArchivo()) {
+            Serial.println("[SD] Error: no se pudo tomar el mutex para escribir el WAV.");
+            return;
+        }
+
         if (!archivoAbierto) {
             Serial.println("[SD] Error: intento de escribir en archivo WAV no abierto.");
+            soltarMutexArchivo();
             return;
         }
         //Escribimos en bloques de 16 bits porque nos conviene
         archivoAbierto.write(dato, tam);
+        soltarMutexArchivo();
         //archivoAbierto.flush(); //Limpiar el buffer obliga que los datos se escriban
     }
     
     void cerrarArchivoWAV()
     {
+        if (!tomarMutexArchivo()) {
+            Serial.println("[SD] Error: no se pudo tomar el mutex para cerrar el WAV.");
+            return;
+        }
+
         if (!archivoAbierto) {
             Serial.println("[SD] Error: no se puede cerrar WAV porque no está abierto.");
+            soltarMutexArchivo();
             return;
         }
 
@@ -155,6 +196,8 @@ class GestorAlmacenamiento
             archivoAbierto.write(header, TAM_CABECERA_WAV); // Pisamos los ceros con los datos reales
             archivoAbierto.close();
         }
+
+        soltarMutexArchivo();
     }
 
     //Al no poder enviar mensajes por wi-fi, nos conformamos con leer los datos

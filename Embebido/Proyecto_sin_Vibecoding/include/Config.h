@@ -25,7 +25,7 @@ const char *WIFI_SSID = "motorola edge 40_5723";
 const char *WIFI_PASS = "SecretoNonofono8";
 
 // Credenciales del Broker (HiveMQ Cloud)
-const char *MQTT_BROKER = "e10a0f3769d14449b0472d6e60e344a9.s1.eu.hivemq.cloud";
+const char *MQTT_BROKER = "e32525b034cd4ef5a01f6e9715295f64.s1.eu.hivemq.cloud";
 const char *MQTT_USER = "admin_prueba";
 const char *MQTT_PASS = "Nonofono8";
 
@@ -61,6 +61,7 @@ const char *MQTT_PASS = "Nonofono8";
 #define DELAY_INIT 3000
 #define DELAY_ENCONTRAR_DISPOSITIVO 5000
 #define TIMEOUT_EXITO_FRACASO 4000
+#define TIMEOUT_WIFI 7000
 #define BITS_RESOLUCION 12
 #define TAM_STACK_GET_EVENT 4096
 #define TAM_STACK_FSM 8192

@@ -222,7 +222,7 @@ void setup() {
   xBuzzerTimer = xTimerCreate("BuzzerTimer", pdMS_TO_TICKS(TIMEOUT_BUZZER),
                               pdFALSE, NULL, vBuzzerCallback);
 
-  xWiFiTimeoutTimer = xTimerCreate("WiFiTimeoutTimer", pdMS_TO_TICKS(TIMEOUT_EXITO_FRACASO),
+  xWiFiTimeoutTimer = xTimerCreate("WiFiTimeoutTimer", pdMS_TO_TICKS(TIMEOUT_WIFI),
                                   pdFALSE, NULL, vWiFiTimeoutCallback);
 }
 
