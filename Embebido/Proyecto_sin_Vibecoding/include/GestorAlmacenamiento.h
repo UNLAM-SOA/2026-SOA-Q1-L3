@@ -49,9 +49,25 @@ class GestorAlmacenamiento
 
     bool iniciarSD()
     {
-        SPI.begin(pinSCK, pinMISO, pinMOSI, pinCS);
+        pinMode(pinCS, OUTPUT);
+        digitalWrite(pinCS, HIGH);
 
-        return SD.begin(pinCS);
+        SPI.begin(pinSCK, pinMISO, pinMOSI, pinCS);
+        SPI.setFrequency(4000000);
+
+        for (int intento = 0; intento < 3; intento++) {
+            if (SD.begin(pinCS)) {
+                Serial.printf("[SD] Inicialización OK en intento %d.\n", intento + 1);
+                return true;
+            }
+
+            Serial.printf("[SD] Intento %d de inicialización fallido.\n", intento + 1);
+            delay(500);
+            digitalWrite(pinCS, HIGH);
+        }
+
+        Serial.println("[SD] No se pudo inicializar la tarjeta SD. Revisa cableado, alimentación, tarjeta y pin CS.");
+        return false;
     }
 
     void abrirArchivoWAV(const String archivo, int tasaMuestreo, int bitsPorMuestra, int canales)

@@ -126,8 +126,11 @@ public class MQTTManager {
                 for(Contacto cont : contactos){
                     Long chatId = cont.getChatId();
 
-                    if(chatId != null){
+                    // Validamos que no sea nulo Y que no sea 0
+                    if(chatId != null && chatId != 0){
                         apiTelegram.enviarMensaje(String.valueOf(chatId), mensajeEmergencia);
+                    } else {
+                        System.err.println("Contacto " + cont.getNombre() + " ignorado: chat_id inválido o es 0");
                     }
                 }
 
