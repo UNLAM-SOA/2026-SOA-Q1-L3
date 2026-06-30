@@ -1,5 +1,7 @@
 package com.soa2026.nonofono;
 
+import android.util.Log;
+
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -109,9 +111,17 @@ public class TelegramApi {
             conexion.setRequestMethod("GET");
 
             // Determinar si usar el InputStream normal o el de error
-            InputStream is = (conexion.getResponseCode() >= 200 && conexion.getResponseCode() < 300)
-                    ? conexion.getInputStream()
-                    : conexion.getErrorStream();
+            int status = conexion.getResponseCode(); // <-- ATRAPAMOS EL CÓDIGO ACÁ
+            InputStream is;
+
+            if (status >= 200 && status < 300) {
+                is = conexion.getInputStream(); // Éxito (200 OK)
+            } else {
+                is = conexion.getErrorStream(); // Error (400, 429, etc.)
+
+                // ACÁ METEMOS EL LOG MÁGICO
+                Log.e("TelegramApi", "¡Telegram rechazó la petición! Código HTTP: " + status + " - " + conexion.getResponseMessage());
+            }
 
             if (is == null) return null; // Si no hay ni inputStream ni errorStream, falló la red
 

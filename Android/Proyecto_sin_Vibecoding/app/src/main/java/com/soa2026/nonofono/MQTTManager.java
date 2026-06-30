@@ -1,5 +1,6 @@
 package com.soa2026.nonofono;
 import android.content.Context;
+import android.util.Log;
 
 import org.eclipse.paho.client.mqttv3.*;
 import javax.net.ssl.SSLSocketFactory;
@@ -139,9 +140,15 @@ public class MQTTManager {
         else if (evento.equals("audio")) {
 
             // SOLUCIÓN 2: Extraemos los datos que SÍ existen en el JSON
-            String ip = jsonContenido.getString("ip");
-            String endpoint = jsonContenido.getString("endpoint");
-            int idMensaje = jsonContenido.getInt("id_mensaje");
+            // Si no viene la IP, asigna un valor por defecto (o un string vacío)
+            String ip = jsonContenido.optString("ip", "0.0.0.0");
+            String endpoint = jsonContenido.optString("endpoint", "");
+            int idMensaje = jsonContenido.optInt("id_mensaje", -1);
+
+            if (ip.equals("0.0.0.0")) {
+                Log.e("MQTTManager", "JSON malformado: No se recibió IP del ESP32");
+                return; // Abortamos limpiamente
+            }
 
             // Inventamos el nombre del archivo de audio ya que no viene en el JSON
             String nombreArchivo = "audio_" + idMensaje + ".wav";
@@ -185,35 +192,41 @@ public class MQTTManager {
             }).start();
         }
         else if(evento.equals("mensaje-predefinido")){
-            String telefono = jsonContenido.getString("telefono");
-            String msj = jsonContenido.getString("contenido");
+            String telefono = jsonContenido.optString("telefono", "");
+            String msj = jsonContenido.optString("contenido", "");
 
             Contacto destino = buscarContacto(telefono);
 
-            if (destino != null){
-                String respuestaString = apiTelegram.enviarMensaje(String.valueOf(destino.getChatId()), msj);
+            if (destino != null) {
+                Long chatId = destino.getChatId();
 
-                // Blindaje contra nulos y fallos de red
-                if (respuestaString != null) {
-                    try {
-                        JSONObject respuesta = new JSONObject(respuestaString);
-                        if (respuesta.optBoolean("ok", false)){
-                            publicar("nonofono/mensajes/predeterminado/ack", "{\"exito\":\"Ok\"}");
-                            System.out.println("Mensaje predefinido enviado con éxito.");
-                        } else {
-                            System.err.println("Telegram rechazó el mensaje: " + respuestaString);
+                // VALIDACIÓN CLAVE: Que no sea nulo y que no sea 0
+                if (chatId != null && chatId != 0) {
+                    String respuestaString = apiTelegram.enviarMensaje(String.valueOf(chatId), msj);
+
+                    if (respuestaString != null) {
+                        try {
+                            JSONObject respuesta = new JSONObject(respuestaString);
+                            if (respuesta.optBoolean("ok", false)){
+                                publicar("nonofono/mensajes/predeterminado/ack", "{\"exito\":\"Ok\"}");
+                                Log.i("MQTTManager", "Mensaje predefinido enviado con éxito.");
+                            } else {
+                                Log.e("MQTTManager", "Telegram rechazó el mensaje: " + respuestaString);
+                            }
+                        } catch (JSONException | MqttException e) {
+                            Log.e("MQTTManager", "Error procesando respuesta de Telegram: " + e.getMessage());
                         }
-                    } catch (JSONException | MqttException e) {
-                        System.err.println("Error procesando respuesta de Telegram: " + e.getMessage());
+                    } else {
+                        Log.e("MQTTManager", "Error de red: apiTelegram devolvió null");
                     }
                 } else {
-                    System.err.println("Error de red: apiTelegram devolvió null");
+                    // ACÁ ATRAPAMOS EL ERROR ANTES DE QUE ROMPA TELEGRAM
+                    Log.w("MQTTManager", "Imposible enviar: El contacto " + destino.getNombre() + " (tel: " + telefono + ") no tiene un chat_id vinculado en Telegram.");
                 }
             } else {
-                System.err.println("No se encontró el destinatario del mensaje predefinido");
+                Log.e("MQTTManager", "No se encontró el destinatario del mensaje predefinido en la base de datos local");
             }
-        }
-        else if (evento.equals("live")){
+        }else if (evento.equals("live")){
             ArrayList<Contacto> contactos = ContactosManager.cargar(contexto);
 
             JSONArray arrayContactos = new JSONArray();

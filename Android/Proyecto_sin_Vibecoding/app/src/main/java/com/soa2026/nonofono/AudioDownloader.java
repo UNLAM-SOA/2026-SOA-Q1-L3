@@ -12,51 +12,53 @@ public class AudioDownloader {
 
     public static boolean descargar(String ip, String ruta, String archivo) {
 
+        // 1. Declaramos la conexión y el archivo ANTES del try
+        HttpURLConnection conn = null;
+        File file = new File(ruta, archivo);
+
         try {
-
-            String urlStr =
-                    "http://" + ip + "/descargar_audio";
-
-            Log.d("HTTP", "Descargando desde: " + urlStr);
+            String urlStr = "http://" + ip + "/descargar_audio";
+            Log.d("AudioDownloader", "Descargando desde: " + urlStr);
 
             URL url = new URL(urlStr);
-            HttpURLConnection conn =
-                    (HttpURLConnection) url.openConnection();
-
+            conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.connect();
 
             if (conn.getResponseCode() != 200) {
-                Log.e("HTTP", "Error HTTP: " + conn.getResponseCode());
-                return false; // ¡Avisamos que falló!
+                Log.e("AudioDownloader", "Error HTTP: " + conn.getResponseCode());
+                return false;
             }
 
-            InputStream input = conn.getInputStream();
+            // 2. ACÁ arranca el Try-with-resources que cierra los flujos automáticamente
+            try (InputStream input = conn.getInputStream();
+                 FileOutputStream output = new FileOutputStream(file)) {
 
-            File file = new File(
-                    ruta,
-                    archivo
-            );
+                byte[] buffer = new byte[4096];
+                int len;
+                while ((len = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, len);
+                }
 
-            FileOutputStream output =
-                    new FileOutputStream(file);
-
-            byte[] buffer = new byte[4096];
-            int len;
-
-            while ((len = input.read(buffer)) != -1) {
-                output.write(buffer, 0, len);
+                Log.d("AudioDownloader", "Audio descargado correctamente");
+                return true;
             }
 
-            output.close();
-            input.close();
-
-            Log.d("HTTP", "Audio descargado correctamente");
-
-            return true; // ¡Éxito!
         } catch (Exception e) {
-            Log.e("HTTP", "Error descargando audio", e);
-            return false; // Hubo un error de red
-        }
+            Log.e("AudioDownloader", "Error descargando audio", e);
 
-}}
+            // Si falló a la mitad, borramos el archivo corrupto para que no ocupe espacio
+            if (file.exists()) {
+                file.delete();
+            }
+            return false;
+
+        } finally {
+            // 3. La conexión HTTP la cerramos manualmente pase lo que pase
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+}

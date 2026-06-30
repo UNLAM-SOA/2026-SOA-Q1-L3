@@ -2,6 +2,7 @@ package com.soa2026.nonofono;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
@@ -10,8 +11,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -24,11 +23,6 @@ public class MainActivity extends AppCompatActivity {
     TextView txtTitulo, txtIcono, txtDescripcion, txtEstado;
     Button btnAgregarContacto, btnLocalizarDispositivo;
     TelegramApi telegram;
-
-    private MQTTManager mqttManager;
-
-    private final ExecutorService executor =
-            Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,23 +43,25 @@ public class MainActivity extends AppCompatActivity {
         btnLocalizarDispositivo.setOnClickListener(v -> startActivity(new Intent(
                 MainActivity.this,
                 LocalizarDispositivoActivity.class)));
-        //Cambié esta linea por el contexto de esta linea porque sino al destruir la
-        //activity provocaba un memory leak
-        mqttManager = MQTTManager.getInstance(this.getApplicationContext());
 
-        conectarMQTT();
         telegram = new TelegramApi("8322654023:AAHhtylDzV06H71m-Xko3mhbg2TQ3J5brdA");
+
+        // Arrancar el Foreground Service que maneja el MQTT
+        Intent serviceIntent = new Intent(this, NonofonoService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-
         actualizarContactos();
     }
 
-    private void actualizarContactos()
-    {
+    private void actualizarContactos() {
         new Thread(() -> {
             //Recuperamos el conjunto de contactos
             ArrayList<Contacto> contactos = ContactosManager.cargar(this);
@@ -89,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
             System.out.println(json);
             if (json == null || json.trim().isEmpty()) {
                 System.err.println("No se pudo obtener respuesta de Telegram. Reintentando luego...");
-                return; // Salimos del hilo limpiamente
+                return;
             }
             try {
 
@@ -143,21 +139,5 @@ public class MainActivity extends AppCompatActivity {
 
             ContactosManager.guardar(this, contactos);
         }).start();
-    }
-
-    private void conectarMQTT() {
-
-        executor.execute(() -> {
-            try {
-                mqttManager.conectar();
-                mqttManager.suscribirse();
-            } catch (Exception e) {
-                System.err.println("Error principal: " + e.getMessage());
-                if (e.getCause() != null) {
-                    System.err.println("Causa raíz (IMPORTANTE): " + e.getCause().getMessage());
-                    e.getCause().printStackTrace();
-                }
-            }
-        });
     }
 }
